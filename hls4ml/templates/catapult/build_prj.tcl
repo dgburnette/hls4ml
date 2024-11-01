@@ -68,7 +68,7 @@ proc setup_xilinx_part { part } {
   solution library add Xilinx_RAMS
   solution library add Xilinx_ROMS
   solution library add Xilinx_FIFO
-  # Point to AMD/Xilinx/Vivado precompiled library cache  
+  # Point to AMD/Xilinx/Vivado precompiled library cache
   if { [info exists env(XILINX_PCL_CACHE)] } {
     options set /Flows/Vivado/PCL_CACHE $env(XILINX_PCL_CACHE)
     solution options set /Flows/Vivado/PCL_CACHE $env(XILINX_PCL_CACHE)

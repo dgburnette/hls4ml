@@ -182,10 +182,33 @@ def config_from_keras_model(
         else:
             layer_config["LayerClassName"] = cls_name
 
-        features = ["in_height", "in_width", "n_chan", "n_filt", "filt_height", "filt_width", "pool_height", "pool_width", "stride_height", "stride_width", "pad_top", "pad_bottom", "pad_left", "pad_right", "d_mult", "depth_multiplier"]
-        non_configs_attrs = [a.name for a in layer_cls.expected_attributes if not a.configurable and a.name in features and a.name in layer.keys()]
+        features = [
+            "in_height",
+            "in_width",
+            "n_chan",
+            "n_filt",
+            "filt_height",
+            "filt_width",
+            "pool_height",
+            "pool_width",
+            "stride_height",
+            "stride_width",
+            "pad_top",
+            "pad_bottom",
+            "pad_left",
+            "pad_right",
+            "d_mult",
+            "depth_multiplier",
+        ]
+        non_configs_attrs = [
+            a.name
+            for a in layer_cls.expected_attributes
+            if not a.configurable and a.name in features and a.name in layer.keys()
+        ]
         if is_act:
-            non_configs_attrs += [a for a in ["in_height", "in_width", "n_chan"] if a not in non_configs_attrs and a in layer.keys()]
+            non_configs_attrs += [
+                a for a in ["in_height", "in_width", "n_chan"] if a not in non_configs_attrs and a in layer.keys()
+            ]
 
         config_attrs = [a for a in layer_cls.expected_attributes if a.configurable]
         for attr in config_attrs:

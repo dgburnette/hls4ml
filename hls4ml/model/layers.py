@@ -542,7 +542,7 @@ class SeparableConv1D(Layer):
         self.add_weights_variable(name='depthwise', var_name='d{index}', quantizer=self.get_attr('depthwise_quantizer'))
         self.add_weights_variable(name='pointwise', var_name='p{index}', quantizer=self.get_attr('pointwise_quantizer'))
 
-        self.set_attr('n_chan_conv', self.get_attr('n_chan')*self.get_attr('depth_multiplier'))
+        self.set_attr('n_chan_conv', self.get_attr('n_chan') * self.get_attr('depth_multiplier'))
         zero_bias_data = np.zeros((self.attributes['n_chan'],))
         precision = IntegerPrecisionType(width=1, signed=False)
         self.add_weights_variable(name='zero_bias', var_name='z{index}', data=zero_bias_data, precision=precision)
@@ -716,7 +716,7 @@ class SeparableConv2D(Layer):
         self.add_weights_variable(name='depthwise', var_name='d{index}', quantizer=self.get_attr('depthwise_quantizer'))
         self.add_weights_variable(name='pointwise', var_name='p{index}', quantizer=self.get_attr('pointwise_quantizer'))
 
-        self.set_attr('n_chan_conv', self.get_attr('n_chan')*self.get_attr('depth_multiplier'))
+        self.set_attr('n_chan_conv', self.get_attr('n_chan') * self.get_attr('depth_multiplier'))
         zero_bias_data = np.zeros((self.attributes['n_chan'],))
         precision = IntegerPrecisionType(width=1, signed=False)
         self.add_weights_variable(name='zero_bias', var_name='z{index}', data=zero_bias_data, precision=precision)

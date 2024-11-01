@@ -2,8 +2,8 @@ import json
 
 import h5py
 
-from hls4ml.model import ModelGraph
 from hls4ml.converters.utils import parse_data_format
+from hls4ml.model import ModelGraph
 
 MAXMULT = 4096
 

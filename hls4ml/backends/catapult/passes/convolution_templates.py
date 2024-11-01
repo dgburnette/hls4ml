@@ -61,7 +61,7 @@ conv1d_config_template = """struct config{index} : nnet::conv1d_config {{
 }};
 // // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
 // Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
-// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented.
 #ifndef INCLUDED_MC_TESTBENCH_H
 const ac_int<config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
 #endif\n"""
@@ -100,7 +100,7 @@ depthwiseconv1d_config_template = """struct config{index} : nnet::depthwiseconv1
 }};
 // // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
 // Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
-// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented.
 #ifndef INCLUDED_MC_TESTBENCH_H
 const ac_int<config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
 #endif\n"""
@@ -162,9 +162,10 @@ class Conv1DFunctionTemplate(FunctionCallTemplate):
 
         return self.template.format(**params)
 
+
 class DepthwiseConv1DConfigTemplate(LayerConfigTemplate):
     def __init__(self):
-        super().__init__((DepthwiseConv1D))
+        super().__init__(DepthwiseConv1D)
         self.template = depthwiseconv1d_config_template
         self.mult_template = conv_mult_config_template
 
@@ -196,6 +197,7 @@ class DepthwiseConv1DConfigTemplate(LayerConfigTemplate):
         mult_config = self.mult_template.format(**mult_params)
 
         return mult_config + '\n' + conv_config
+
 
 class DepthwiseConv1DFunctionTemplate(Conv1DFunctionTemplate):
     def __init__(self):
@@ -247,7 +249,7 @@ conv2d_config_template = """struct config{index} : nnet::conv2d_config {{
 
 // // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
 // Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
-// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented.
 #ifndef INCLUDED_MC_TESTBENCH_H
 const ac_int<config{index}::filt_height * config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
 #endif\n"""
@@ -294,7 +296,7 @@ depthwiseconv2d_config_template = """struct config{index} : nnet::depthwiseconv2
 }};
 // // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
 // Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
-// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented.
 #ifndef INCLUDED_MC_TESTBENCH_H
 const ac_int<config{index}::filt_height * config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
 #endif\n"""
@@ -348,6 +350,7 @@ class Conv2DConfigTemplate(LayerConfigTemplate):
 
         return mult_config + '\n' + conv_config
 
+
 class DepthwiseConv2DConfigTemplate(LayerConfigTemplate):
     def __init__(self):
         super().__init__(DepthwiseConv2D)
@@ -388,6 +391,7 @@ class DepthwiseConv2DConfigTemplate(LayerConfigTemplate):
         mult_config = self.mult_template.format(**mult_params)
 
         return mult_config + '\n' + conv_config
+
 
 class Conv2DFunctionTemplate(FunctionCallTemplate):
     def __init__(self):

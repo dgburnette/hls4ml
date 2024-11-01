@@ -201,7 +201,8 @@ class CatapultBackend(FPGABackend):
         PowerOpt=0,
         BuildBUP=0,
         BUPWorkers=0,
-        LaunchDA=0, **_
+        LaunchDA=0,
+        **_,
     ):
         """Create initial configuration of the Vivado backend.
 
@@ -229,7 +230,7 @@ class CatapultBackend(FPGABackend):
             vhdl (bool, optional): Enables post-HLS VHDL netlist generation. Defaults to True.
             verilog (bool, optional): Enables post-HLS Verilog netlist generation. Defaults to True.
             RTLSynth (bool, optional): Enables downstream RTL synthesis. Default to False.
-            RandomTBFrame (int, optional): In the absense of python dataset files for SCVerify, generate N frames of 
+            RandomTBFrame (int, optional): In the absense of python dataset files for SCVerify, generate N frames of
                 random feature data. Defaults to 2.
             PowerEst (bool, optional): Enables post-HLS power estimation. Default to False.
             PowerOpt (bool, optional): Enables post-HLS power optimization. Default to False.
@@ -264,18 +265,18 @@ class CatapultBackend(FPGABackend):
         # New experimental option
         config['CModelDefaultThreshold'] = 0.0
         config['BuildOptions'] = {
-            'csim':           csim,
-            'SCVerify':       SCVerify,
-            'Synth':          Synth,
-            'vhdl':           vhdl,
-            'verilog':        verilog,
-            'RTLSynth':       RTLSynth,
+            'csim': csim,
+            'SCVerify': SCVerify,
+            'Synth': Synth,
+            'vhdl': vhdl,
+            'verilog': verilog,
+            'RTLSynth': RTLSynth,
             'RandomTBFrames': RandomTBFrames,
-            'PowerEst':       PowerEst,
-            'PowerOpt':       PowerOpt,
-            'BuildBUP':       BuildBUP,
-            'BUPWorkers':     BUPWorkers,
-            'LaunchDA':       LaunchDA
+            'PowerEst': PowerEst,
+            'PowerOpt': PowerOpt,
+            'BuildBUP': BuildBUP,
+            'BUPWorkers': BUPWorkers,
+            'LaunchDA': LaunchDA,
         }
 
         return config
