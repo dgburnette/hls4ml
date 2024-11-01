@@ -37,12 +37,15 @@ size_t trace_type_size = sizeof(double);
 CCS_MAIN(int argc, char *argv[]) {
     if ((argc < 2) || (argc == 3)) {
         std::cerr << "Error - too few arguments" << std::endl;
-        std::cerr << "Usage: " << argv[0] << " <weights_dir> <tb_input_features> <tb_output_predictions> <threshold>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <weights_dir> <tb_input_features> <tb_output_predictions> <threshold>"
+                  << std::endl;
         std::cerr << "Where: <weights_dir>           - string pathname to directory containing wN.txt and bN.txt files"
                   << std::endl;
         std::cerr << "       <tb_input_features>     - string pathname to tb_input_features.dat (optional)" << std::endl;
         std::cerr << "       <tb_output_predictions> - string pathname to tb_output_predictions.dat (optional)" << std::endl;
-        std::cerr << "       <threshold>             - Python vs C++ prediction comparison threshold. Set to 0.0 to disable. (optional)" << std::endl;
+        std::cerr << "       <threshold>             - Python vs C++ prediction comparison threshold. Set to 0.0 to "
+                     "disable. (optional)"
+                  << std::endl;
         std::cerr << std::endl;
         std::cerr << "If no testbench input/prediction data provided, random input data will be generated" << std::endl;
         CCS_RETURN(-1);
@@ -95,7 +98,8 @@ CCS_MAIN(int argc, char *argv[]) {
     std::string pline;
     int e = 0;
     unsigned int total_err_cnt = 0;
-    (void) total_err_cnt; (void) threshold; // to prevent unused-variable warnings when tb feature is not enabled
+    (void)total_err_cnt;
+    (void)threshold; // to prevent unused-variable warnings when tb feature is not enabled
 
     if (!use_random) {
         while (std::getline(fin, iline) && std::getline(fpr, pline)) {
@@ -173,7 +177,9 @@ CCS_MAIN(int argc, char *argv[]) {
 
     if (!use_random) {
         if (total_err_cnt) {
-            std::cerr << "Error: A total of " << total_err_cnt << " differences detected between golden Python prediction and C++ prediction using threshold of " << threshold << std::endl;
+            std::cerr << "Error: A total of " << total_err_cnt
+                      << " differences detected between golden Python prediction and C++ prediction using threshold of "
+                      << threshold << std::endl;
         } else {
             if (threshold > 0.0) {
                 std::cout << "Python predictions and C++ predictions are within threshold of " << threshold << std::endl;

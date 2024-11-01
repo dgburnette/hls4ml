@@ -1,10 +1,10 @@
 #ifndef NNET_SEPARABLE_CONV1D_STREAM_H_
 #define NNET_SEPARABLE_CONV1D_STREAM_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_conv1d_stream.h"
 #include "nnet_sepconv_stream.h"
+#include <ac_channel.h>
 
 namespace nnet {
 

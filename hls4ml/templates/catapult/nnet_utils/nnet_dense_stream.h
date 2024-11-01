@@ -1,10 +1,10 @@
 #ifndef NNET_DENSE_STREAM_H_
 #define NNET_DENSE_STREAM_H_
 
-#include <ac_channel.h>
-#include <ac_sync.h>
 #include "nnet_common.h"
 #include "nnet_types.h"
+#include <ac_channel.h>
+#include <ac_sync.h>
 #include <assert.h>
 #include <math.h>
 
@@ -14,7 +14,7 @@ template <class data_T, class res_T, typename CONFIG_T>
 void dense_wrapper(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_out],
                    typename CONFIG_T::weight_t weights[CONFIG_T::n_in * CONFIG_T::n_out],
                    typename CONFIG_T::bias_t biases[CONFIG_T::n_out]) {
-					   
+
     //#pragma HLS INLINE region
     if (CONFIG_T::strategy == nnet::latency) {
         //#pragma HLS PIPELINE II=CONFIG_T::reuse_factor
@@ -27,17 +27,16 @@ void dense_wrapper(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_out],
 template <class data_T, class res_T, typename CONFIG_T>
 void dense(ac_channel<data_T> &data_stream, ac_channel<res_T> &res_stream,
            typename CONFIG_T::weight_t weights[CONFIG_T::n_in * CONFIG_T::n_out],
-           typename CONFIG_T::bias_t biases[CONFIG_T::n_out],ac_sync &sync_w,ac_sync &sync_b) {
+           typename CONFIG_T::bias_t biases[CONFIG_T::n_out], ac_sync &sync_w, ac_sync &sync_b) {
     typename data_T::value_type data[CONFIG_T::n_in];
     //#pragma HLS ARRAY_PARTITION variable=data complete
 
     typename res_T::value_type res[CONFIG_T::n_out];
     //#pragma HLS ARRAY_PARTITION variable=res complete
 
-	//#pragma HLS inline region
-	sync_w.sync_in(weights);
-	sync_b.sync_in(biases);
-
+    //#pragma HLS inline region
+    sync_w.sync_in(weights);
+    sync_b.sync_in(biases);
 
     if ((CONFIG_T::n_in / data_T::size) > 1) {
     }
@@ -118,12 +117,6 @@ ResWrite:
         res_stream.write(res_pack);
     }
 }
-
-
-
-
-
-
 
 } // namespace nnet
 

@@ -1,9 +1,9 @@
 #ifndef NNET_CONV1D_STREAM_H_
 #define NNET_CONV1D_STREAM_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_conv_stream.h"
+#include <ac_channel.h>
 
 namespace nnet {
 

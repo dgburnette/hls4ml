@@ -1,9 +1,9 @@
 #ifndef NNET_MULT_H_
 #define NNET_MULT_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_helpers.h"
+#include <ac_channel.h>
 #include <iostream>
 #include <math.h>
 

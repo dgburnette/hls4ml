@@ -1,8 +1,8 @@
 #ifndef NNET_IMAGE_H_
 #define NNET_IMAGE_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
+#include <ac_channel.h>
 #include <math.h>
 
 namespace nnet {

@@ -1,9 +1,9 @@
 #ifndef NNET_EMBED_STREAM_H_
 #define NNET_EMBED_STREAM_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_helpers.h"
+#include <ac_channel.h>
 
 namespace nnet {
 
@@ -18,7 +18,7 @@ InputSequence:
         //#pragma HLS PIPELINE II=CONFIG_T::reuse_factor
 
         res_T res_pack;
-    //#pragma HLS DATA_PACK variable=res_pack
+        //#pragma HLS DATA_PACK variable=res_pack
 
     DenseEmbedding:
         for (int i = 0; i < CONFIG_T::n_out; i++) {

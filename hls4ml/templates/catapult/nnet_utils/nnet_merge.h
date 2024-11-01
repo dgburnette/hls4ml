@@ -2,9 +2,9 @@
 #ifndef NNET_MERGE_H_
 #define NNET_MERGE_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_mult.h"
+#include <ac_channel.h>
 #include <math.h>
 
 namespace nnet {

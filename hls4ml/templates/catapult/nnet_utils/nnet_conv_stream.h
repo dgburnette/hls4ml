@@ -1,10 +1,10 @@
 #ifndef NNET_CONV_STREAM_H_
 #define NNET_CONV_STREAM_H_
 
-#include <ac_channel.h>
 #include "ap_shift_reg.h"
 #include "nnet_common.h"
 #include "nnet_dense.h"
+#include <ac_channel.h>
 
 namespace nnet {
 

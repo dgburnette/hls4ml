@@ -2,11 +2,11 @@
 #ifndef NNET_RECURSIVE_H_
 #define NNET_RECURSIVE_H_
 
-#include <ac_channel.h>
 #include "nnet_activation.h"
 #include "nnet_common.h"
 #include "nnet_dense.h"
 #include "nnet_recr_activations.h"
+#include <ac_channel.h>
 
 namespace nnet {
 

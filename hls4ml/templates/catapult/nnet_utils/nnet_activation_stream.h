@@ -7,12 +7,12 @@
 #ifndef NNET_ACTIVATION_STREAM_H_
 #define NNET_ACTIVATION_STREAM_H_
 
-#include <ac_channel.h>
-#include <ac_fixed.h>
 #include "nnet_activation.h"
 #include "nnet_common.h"
 #include "nnet_stream.h"
 #include "nnet_types.h"
+#include <ac_channel.h>
+#include <ac_fixed.h>
 #include <ac_math/ac_elu_pwl.h>
 #include <ac_math/ac_pow_pwl.h>
 #include <ac_math/ac_relu.h>
@@ -38,7 +38,7 @@ LinearActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     LinearPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -60,7 +60,7 @@ ReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     ReLUPackLoop:
         for (unsigned int j = 0; j < res_T::size; j++) {
@@ -104,7 +104,7 @@ SigmoidActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     SigmoidPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -443,7 +443,7 @@ TanHActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     TanHPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -494,7 +494,7 @@ HardSigmoidActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     HardSigmoidPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -516,8 +516,8 @@ HardSigmoidActLoop:
 // *************************************************
 
 template <class data_T, class res_T, typename CONFIG_T> void hard_tanh(ac_channel<data_T> &data, ac_channel<res_T> &res) {
-// typename data_T::value_type slope = (typename data_T::value_type) 0.2;
-// typename data_T::value_type shift = (typename data_T::value_type) 0.5;
+    // typename data_T::value_type slope = (typename data_T::value_type) 0.2;
+    // typename data_T::value_type shift = (typename data_T::value_type) 0.5;
 
 HardTanhActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
@@ -525,7 +525,7 @@ HardTanhActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    // PRAGMA_DATA_PACK(out_data)
+        // PRAGMA_DATA_PACK(out_data)
 
     HardTanhPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -553,7 +553,7 @@ LeakyReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     LeakyReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -579,7 +579,7 @@ ThresholdedReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     ThresholdedReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -620,7 +620,7 @@ SoftplusActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     SoftplusPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -680,7 +680,7 @@ SoftsignActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     SoftsignPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -742,7 +742,7 @@ EluActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     EluPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -805,7 +805,7 @@ SeluActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     SeluPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -853,7 +853,7 @@ PReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     PReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -877,7 +877,7 @@ PReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     PReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -901,7 +901,7 @@ PReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-    //#pragma HLS DATA_PACK variable=out_data
+        //#pragma HLS DATA_PACK variable=out_data
 
     PReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {

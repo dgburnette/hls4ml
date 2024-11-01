@@ -1,9 +1,9 @@
 #ifndef NNET_BATCHNORM_H_
 #define NNET_BATCHNORM_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_dense.h"
+#include <ac_channel.h>
 #include <math.h>
 
 namespace nnet {

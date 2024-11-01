@@ -2,9 +2,9 @@
 #ifndef NNET_DENSE_RESOURCE_H_
 #define NNET_DENSE_RESOURCE_H_
 
-#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_mult.h"
+#include <ac_channel.h>
 #include <assert.h>
 #include <math.h>
 
@@ -32,7 +32,7 @@ void dense_resource_rf_leq_nin(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::
     //#pragma HLS ARRAY_PARTITION variable=biases complete
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-//#pragma HLS ARRAY_PARTITION variable=acc complete
+    //#pragma HLS ARRAY_PARTITION variable=acc complete
 
 InitAccum:
     for (int iacc = 0; iacc < nout; iacc++) {
@@ -102,7 +102,7 @@ void dense_resource_rf_gt_nin_rem0(data_T data[CONFIG_T::n_in], res_T res[CONFIG
     //#pragma HLS ARRAY_PARTITION variable=biases complete
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-//#pragma HLS ARRAY_PARTITION variable=acc complete
+    //#pragma HLS ARRAY_PARTITION variable=acc complete
 
 InitAccum:
     for (int iacc = 0; iacc < nout; iacc++) {
@@ -121,7 +121,7 @@ IndexLoop:
     for (int ir = 0; ir < rufactor; ir++) {
         outidx[ir] = outstep;
         if ((ir + 1) % nin == 0) {
-            //coverity[DEADCODE]
+            // coverity[DEADCODE]
             outstep++;
         }
     }
@@ -147,7 +147,7 @@ ReuseLoop:
 
         in_index++;
         if (in_index >= nin) {
-            //coverity[DEADCODE]
+            // coverity[DEADCODE]
             in_index = 0;
             // outstep++; // This causes a huge increase in scheduling and RTL generation times, hence the above workaround.
         }
@@ -182,7 +182,7 @@ void dense_resource_rf_gt_nin(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n
     //#pragma HLS ARRAY_PARTITION variable=biases complete
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-//#pragma HLS ARRAY_PARTITION variable=acc complete
+    //#pragma HLS ARRAY_PARTITION variable=acc complete
 
 InitAccum:
     for (int iacc = 0; iacc < nout; iacc++) {
@@ -193,9 +193,9 @@ InitAccum:
 ReuseLoop:
     for (int ir = 0; ir < rufactor; ir++) {
         //#pragma HLS PIPELINE II=1 rewind
-        //coverity[STACK_USE]
+        // coverity[STACK_USE]
         typename CONFIG_T::accum_t tmpmult[block_factor];
-    //#pragma HLS ARRAY_PARTITION variable=tmpmult complete
+        //#pragma HLS ARRAY_PARTITION variable=tmpmult complete
 
     MultLoop:
         for (int im = 0; im < block_factor; im++) {
@@ -203,14 +203,14 @@ ReuseLoop:
             unsigned int w_index = ir + rufactor * im;
             int in_index = w_index % nin;
             if (w_index >= CONFIG_T::n_in * CONFIG_T::n_out) {
-                //coverity[DEADCODE]
+                // coverity[DEADCODE]
                 continue; // check out of bounds
             }
             tmpmult[im] =
                 CONFIG_T::template product<data_T, typename CONFIG_T::weight_t>::product(data[in_index], weights[w_index]);
         }
         typename CONFIG_T::accum_t mult[multiplier_limit];
-    //#pragma HLS ARRAY_PARTITION variable=mult complete
+        //#pragma HLS ARRAY_PARTITION variable=mult complete
 
     ResetMult:
         for (int imult = 0; imult < multiplier_limit; imult++) {
@@ -224,7 +224,7 @@ ReuseLoop:
             int w_index = ir + rufactor * im;
             int out_index = w_index / multfactor;
             if (out_index >= multiplier_limit) {
-                //coverity[DEADCODE]
+                // coverity[DEADCODE]
                 continue; // check out of bounds
             }
             mult[out_index] += tmpmult[im];
@@ -235,7 +235,7 @@ ReuseLoop:
             //#pragma HLS UNROLL
             // int out_index = im/multscale; // This is the general case
             // acc[out_index] += mult[im];
-            //coverity[OVERRUN]
+            // coverity[OVERRUN]
             acc[im] += mult[im]; // If RF > N_IN then multiplier_limit == n_out
         }
     }
