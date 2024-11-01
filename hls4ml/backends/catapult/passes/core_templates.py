@@ -131,7 +131,9 @@ hard_activ_config_template = """struct {type}_config{index} {{
     static const unsigned io_type = nnet::{iotype};
     static const unsigned reuse_factor = {reuse};
 }};
-// really this allocation of pixels array ought to be in a .cpp file
+// Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
+// Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
 #ifndef INCLUDED_MC_TESTBENCH_H
 const {slope_t.name} {type}_config{index}::slope = {slope};
 const {shift_t.name} {type}_config{index}::shift = {shift};

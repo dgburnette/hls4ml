@@ -23,7 +23,7 @@
 // #define BUILD_TABLE_FILE 1
 #endif
 
-#include "ac_fixed.h"
+#include <ac_fixed.h>
 #include "ac_std_float.h"
 #include "nnet_common.h"
 #include <ac_math/ac_elu_pwl.h>

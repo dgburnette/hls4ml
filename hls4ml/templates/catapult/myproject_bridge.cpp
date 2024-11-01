@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <map>
 
-// hls-fpga-machine-learning insert weights dir
+static std::string s_weights_dir = "weights";
 
 const char *get_weights_dir() { return s_weights_dir.c_str(); }
 
@@ -58,6 +58,7 @@ void collect_trace_output(struct trace_data *c_trace_outputs) {
 void myproject_float(
     // hls-fpga-machine-learning insert header #float
 ) {
+    // hls-fpga-machine-learning insert namespace
 
     // hls-fpga-machine-learning insert wrapper #float
 }
@@ -65,6 +66,8 @@ void myproject_float(
 void myproject_double(
     // hls-fpga-machine-learning insert header #double
 ) {
+    // hls-fpga-machine-learning insert namespace
+
     // hls-fpga-machine-learning insert wrapper #double
 }
 }

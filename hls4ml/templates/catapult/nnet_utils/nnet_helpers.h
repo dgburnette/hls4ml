@@ -2,7 +2,7 @@
 #ifndef NNET_HELPERS_H
 #define NNET_HELPERS_H
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -312,6 +312,38 @@ void copy_data(std::vector<src_T> src, ac_channel<dst_T> &dst) {
             dst.write(dst_pack);
         }
     }
+}
+
+template <class src_T, class dst_T, size_t OFFSET, size_t SIZE>
+unsigned int compare_data(std::vector<src_T> src, ac_channel<dst_T> &dst, float threshold=0.01, bool verbose=false) {
+    typename std::vector<src_T>::const_iterator in_begin = src.cbegin() + OFFSET;
+    typename std::vector<src_T>::const_iterator in_end = in_begin + SIZE;
+
+    unsigned int err_cnt = 0;
+    unsigned index = 0;
+    size_t i_pack = 0;
+    dst_T dst_pack;
+    for (typename std::vector<src_T>::const_iterator i = in_begin; i != in_end; ++i) {
+        if (i_pack == 0) {
+            dst_pack = dst[index++]; // non-destructive peak of values
+        }
+        double ref = *i;
+        typename dst_T::value_type ref_quant(ref);
+        double dut = dst_pack[i_pack++].to_double();
+        double delta = abs(ref_quant.to_double()-dut);
+        if (delta > threshold) {
+            std::cout << "Ref " << ref << " Ref(quantized) " << ref_quant << "  DUT " << dut << "     <- MISMATCH" << std::endl;
+            err_cnt++;
+        } else {
+            if (verbose) {
+                std::cout << "Ref " << ref << " Ref(quantized) " << ref_quant << "  DUT " << dut << "     <- MISMATCH" << std::endl;
+            }
+        }
+        if (i_pack == dst_T::size) {
+            i_pack = 0;
+        }
+    }
+    return err_cnt;
 }
 
 template <class src_T, class dst_T, size_t OFFSET, size_t SIZE> void copy_data_axi(std::vector<src_T> src, dst_T dst[SIZE]) {

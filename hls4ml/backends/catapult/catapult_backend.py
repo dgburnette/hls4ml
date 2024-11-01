@@ -182,44 +182,173 @@ class CatapultBackend(FPGABackend):
         tech='fpga',
         part='xcku115-flvb2104-2-i',
         asiclibs='nangate-45nm',
+        asicfifo='hls4ml_lib.mgc_pipe_mem',
         fifo=None,
         clock_period=5,
         io_type='io_parallel',
+        namespace=None,
+        write_weights_txt=True,
+        write_tar=False,
+        project_dir=None,
+        csim=1,
+        SCVerify=1,
+        Synth=1,
+        vhdl=1,
+        verilog=1,
+        RTLSynth=0,
+        RandomTBFrames=2,
+        PowerEst=0,
+        PowerOpt=0,
+        BuildBUP=0,
+        BUPWorkers=0,
+        LaunchDA=0, **_
     ):
-        config = {}
+        """Create initial configuration of the Vivado backend.
 
+        Args:
+            tech (str, optional): The target technology type. One of 'asic' or 'fpga'.
+            part (str, optional): The FPGA part to be used. Defaults to 'xcvu13p-flga2577-2-e'.
+            asiclibs (str, optional): The list of ASIC Catapult libraries to load. Defaults to 'nangate-45nm'.
+            asicfifo (str, optional): The name of the ASIC FIFO library module to use. Defaults to 'hls4ml_lib.mgc_pipe_mem'.
+            fifo (str, optional): The name of the FPGA FIFO library module to use. Default to None.
+            clock_period (int, optional): The clock period. Defaults to 5.
+            io_type (str, optional): Type of implementation used. One of
+                'io_parallel' or 'io_stream'. Defaults to 'io_parallel'.
+            namespace (str, optional): If defined, place all generated code within a namespace. Defaults to None.
+            write_weights_txt (bool, optional): If True, writes weights to .txt files which speeds up compilation.
+                Defaults to True.
+            write_tar (bool, optional): If True, compresses the output directory into a .tar.gz file. Defaults to False.
+            namespace (str, optional): If defined, place all generated code within a namespace. Defaults to None.
+            write_weights_txt (bool, optional): If True, writes weights to .txt files which speeds up compilation.
+                Defaults to True.
+            write_tar (bool, optional): If True, compresses the output directory into a .tar.gz file. Defaults to False.
+            project_dir (str, optional): The name for the Catapult project directory. Defaults to None.
+            csim (bool, optional): Enables/disables C model simulation.
+            SCVerify (bool, optional): Enables C-to-RTL SCVerify verification after HLS. Defaults to False.
+            Synth (bool, optional): Enables the full HLS run, setting to False stops after HLS compilation.
+            vhdl (bool, optional): Enables post-HLS VHDL netlist generation. Defaults to True.
+            verilog (bool, optional): Enables post-HLS Verilog netlist generation. Defaults to True.
+            RTLSynth (bool, optional): Enables downstream RTL synthesis. Default to False.
+            RandomTBFrame (int, optional): In the absense of python dataset files for SCVerify, generate N frames of 
+                random feature data. Defaults to 2.
+            PowerEst (bool, optional): Enables post-HLS power estimation. Default to False.
+            PowerOpt (bool, optional): Enables post-HLS power optimization. Default to False.
+            BuildBUP (bool, optional): Enables a bottom-up HLS flow. Defaults to False.
+            BUPWorkers (int, optional): When non-zero, specifies the number of parallel Catapult jobs to run. Defaults to 0.
+            LaunchDA (bool, optional): Enables launching Catapult Design Analyzer during/after HLS. Defaults to False.
+
+        Returns:
+            dict: initial configuration.
+        """
+        config = {}
+        config['Backend'] = 'Catapult'
         config['Technology'] = tech
         if tech == 'fpga':
             config['Part'] = part if part is not None else 'xcvu13p-flga2577-2-e'
         else:
             config['ASICLibs'] = asiclibs if asiclibs is not None else 'nangate-45nm'
+        config['FIFO'] = fifo
+        config['ASICFIFO'] = asicfifo
         config['ClockPeriod'] = clock_period
         config['FIFO'] = fifo
         config['IOType'] = io_type
+        config['ProjectDir'] = project_dir
         config['HLSConfig'] = {}
+        config['WriterConfig'] = {
+            'Namespace': namespace,
+            'WriteWeightsTxt': write_weights_txt,
+            'WriteTar': write_tar,
+        }
+        config['ROMLocation'] = 'Local'
+        config['CopyNNET'] = False
+        # New experimental option
+        config['CModelDefaultThreshold'] = 0.0
+        config['BuildOptions'] = {
+            'csim':           csim,
+            'SCVerify':       SCVerify,
+            'Synth':          Synth,
+            'vhdl':           vhdl,
+            'verilog':        verilog,
+            'RTLSynth':       RTLSynth,
+            'RandomTBFrames': RandomTBFrames,
+            'PowerEst':       PowerEst,
+            'PowerOpt':       PowerOpt,
+            'BuildBUP':       BuildBUP,
+            'BUPWorkers':     BUPWorkers,
+            'LaunchDA':       LaunchDA
+        }
 
         return config
 
+    # Note: the following options are depricated and replaced
+    #   cosim->SCVerify, validation->SCVerify, vsynth->rtlsyn
+    # Note: the following options are not yet supported
+    #   export, fifo_opt, bitfile
     def build(
         self,
         model,
         reset=False,
-        csim=True,
-        synth=True,
-        cosim=False,
-        validation=False,
-        vhdl=False,
-        verilog=True,
-        export=False,
-        vsynth=False,
-        fifo_opt=False,
-        bitfile=False,
-        ran_frame=5,
-        sw_opt=False,
-        power=False,
-        da=False,
-        bup=False,
+        csim=None,
+        synth=None,
+        cosim=None,
+        validation=None,
+        export=None,
+        vsynth=None,
+        fifo_opt=None,
+        bitfile=None,
+        sw_opt=None,
+        power=None,
+        da=None,
+        bup=None,
+        ran_frame=None,
+        vhdl=None,
+        verilog=None,
+        Synth=None,
+        SCVerify=None,
+        RandomTBFrames=None,
+        PowerEst=None,
+        PowerOpt=None,
+        LaunchDA=None,
+        BuildBUP=None,
+        BUPWorkers=None,
+        RTLSynth=None,
     ):
+        # Some argument checks/mappings
+        if cosim is not None:
+            print("HLS4ML build() option 'cosim' is being depricated. Use 'SCVerify'")
+            SCVerify = cosim if cosim is True else SCVerify
+        if validation is not None:
+            print("HLS4ML build() option 'validation' is being depricated. Use 'SCVerify'")
+            SCVerify = validation if validation is True else SCVerify
+        if vsynth is not None:
+            print("HLS4ML build() option 'vsynth' is being depricated. Use 'RTLSynth'")
+            RTLSynth = vsynth if vsynth is True else RTLSynth
+        if export is not None:
+            print("HLS4ML build() option 'export' is not yet supported")
+        if fifo_opt is not None:
+            print("HLS4ML build() option 'fifo_opt' is not yet supported")
+        if bitfile is not None:
+            print("HLS4ML build() option 'bitfile' is not yet supported")
+
+        if synth is not None:
+            print("HLS4ML build() option 'synth' is being depricated. Use 'Synth'")
+            Synth = synth if synth is True else Synth
+        if ran_frame is not None:
+            print("HLS4ML build() option 'ran_frame' is being depricated. Use 'RandomTBFrames'")
+            RandomTBFrames = ran_frame if ran_frame is True else RandomTBFrames
+        if sw_opt is not None:
+            print("HLS4ML build() option 'sw_opt' is being depricated. Use 'PowerEst'")
+            PowerEst = sw_opt if sw_opt is True else PowerEst
+        if power is not None:
+            print("HLS4ML build() option 'power' is being depricated. Use 'PowerOpt'")
+            PowerOpt = power if power is True else PowerOpt
+        if da is not None:
+            print("HLS4ML build() option 'da' is being depricated. Use 'LaunchDA'")
+            LaunchDA = da if da is True else LaunchDA
+        if bup is not None:
+            print("HLS4ML build() option 'bup' is being depricated. Use 'BuildBUP'")
+            BuildBUP = bup if bup is True else BuildBUP
+
         # print(f'ran_frame value: {ran_frame}')  # Add this line for debugging
         catapult_exe = 'catapult'
         if 'linux' in sys.platform:
@@ -238,9 +367,33 @@ class CatapultBackend(FPGABackend):
         curr_dir = os.getcwd()
         # this execution moves into the hls4ml-generated "output_dir" and runs the build_prj.tcl script.
         os.chdir(model.config.get_output_dir())
-        ccs_args = f'"reset={reset} csim={csim} synth={synth} cosim={cosim} validation={validation}'
-        ccs_args += f' export={export} vsynth={vsynth} fifo_opt={fifo_opt} bitfile={bitfile} ran_frame={ran_frame}'
-        ccs_args += f' sw_opt={sw_opt} power={power} da={da} vhdl={vhdl} verilog={verilog} bup={bup}"'
+        ccs_args = f'"reset={reset}'
+        if csim is not None:
+            ccs_args += f' csim={csim}'
+        if vhdl is not None:
+            ccs_args += f' vhdl={vhdl}'
+        if verilog is not None:
+            ccs_args += f' verilog={verilog}'
+        if Synth is not None:
+            ccs_args += f' Synth={Synth}'
+        if SCVerify is not None:
+            ccs_args += f' SCVerify={SCVerify}'
+        if RandomTBFrames is not None:
+            ccs_args += f' RandomTBFrames={RandomTBFrames}'
+        if PowerEst is not None:
+            ccs_args += f' PowerEst={PowerEst}'
+        if PowerOpt is not None:
+            ccs_args += f' PowerOpt={PowerOpt}'
+        if LaunchDA is not None:
+            ccs_args += f' LaunchDA={LaunchDA}'
+        if BuildBUP is not None:
+            ccs_args += f' BuildBUP={BuildBUP}'
+        if BUPWorkers is not None:
+            ccs_args += f' BUPWorkers={BUPWorkers}'
+        if RTLSynth is not None:
+            ccs_args += f' RTLSynth={RTLSynth}'
+        ccs_args += '"'
+        print(f'Catapult backend build() option overrides: {ccs_args}')
         ccs_invoke = catapult_exe + ' -product ultra -shell -f build_prj.tcl -eval \'set ::argv ' + ccs_args + '\''
         print(ccs_invoke)
         os.system(ccs_invoke)
@@ -328,7 +481,7 @@ class CatapultBackend(FPGABackend):
         dw_out_precision, _ = layer.model.config.get_precision(layer, 'dw_output')
         dw_out_name = layer.name + '_dw_out_t'
         if layer.model.config.get_config_value('IOType') == 'io_stream':
-            dw_output_t = PackedType(dw_out_name, dw_out_precision, layer.get_attr('n_chan'), n_pack=1)
+            dw_output_t = PackedType(dw_out_name, dw_out_precision, layer.get_attr('n_chan_conv'), n_pack=1)
         else:
             dw_output_t = NamedType(dw_out_name, dw_out_precision)
         layer.set_attr('dw_output_t', dw_output_t)
@@ -383,7 +536,7 @@ class CatapultBackend(FPGABackend):
         dw_out_precision, _ = layer.model.config.get_precision(layer, 'dw_output')
         dw_out_name = layer.name + '_dw_out_t'
         if layer.model.config.get_config_value('IOType') == 'io_stream':
-            dw_output_t = PackedType(dw_out_name, dw_out_precision, layer.get_attr('n_chan'), n_pack=1)
+            dw_output_t = PackedType(dw_out_name, dw_out_precision, layer.get_attr('n_chan_conv'), n_pack=1)
         else:
             dw_output_t = NamedType(dw_out_name, dw_out_precision)
         layer.set_attr('dw_output_t', dw_output_t)
@@ -406,7 +559,7 @@ class CatapultBackend(FPGABackend):
         dw_out_precision, _ = layer.model.config.get_precision(layer, 'dw_output')
         dw_out_name = layer.name + '_dw_out_t'
         if layer.model.config.get_config_value('IOType') == 'io_stream':
-            dw_output_t = PackedType(dw_out_name, dw_out_precision, layer.get_attr('n_chan'), n_pack=1)
+            dw_output_t = PackedType(dw_out_name, dw_out_precision, layer.get_attr('n_filt'), n_pack=1)
         else:
             dw_output_t = NamedType(dw_out_name, dw_out_precision)
         layer.set_attr('dw_output_t', dw_output_t)

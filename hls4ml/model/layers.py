@@ -485,6 +485,7 @@ class Conv1D(Layer):
         Attribute('out_width'),
         Attribute('n_chan'),
         Attribute('n_filt'),
+        Attribute('n_chan_conv'),
         Attribute('filt_width'),
         Attribute('stride_width'),
         Attribute('pad_left'),
@@ -506,6 +507,7 @@ class Conv1D(Layer):
         self.add_output_variable(shape, dims)
         self.add_weights(quantizer=self.get_attr('weight_quantizer'))
         self.add_bias(quantizer=self.get_attr('bias_quantizer'))
+        self.set_attr('n_chan_conv', self.get_attr('n_chan'))
 
 
 class SeparableConv1D(Layer):
@@ -514,6 +516,7 @@ class SeparableConv1D(Layer):
         Attribute('out_width'),
         Attribute('n_chan'),
         Attribute('n_filt'),
+        Attribute('n_chan_conv'),
         Attribute('depth_multiplier', default=1),
         Attribute('filt_width'),
         Attribute('stride_width'),
@@ -539,6 +542,7 @@ class SeparableConv1D(Layer):
         self.add_weights_variable(name='depthwise', var_name='d{index}', quantizer=self.get_attr('depthwise_quantizer'))
         self.add_weights_variable(name='pointwise', var_name='p{index}', quantizer=self.get_attr('pointwise_quantizer'))
 
+        self.set_attr('n_chan_conv', self.get_attr('n_chan')*self.get_attr('depth_multiplier'))
         zero_bias_data = np.zeros((self.attributes['n_chan'],))
         precision = IntegerPrecisionType(width=1, signed=False)
         self.add_weights_variable(name='zero_bias', var_name='z{index}', data=zero_bias_data, precision=precision)
@@ -558,6 +562,7 @@ class DepthwiseConv1D(Conv1D):
         Attribute('n_chan'),
         Attribute('depth_multiplier', default=1),
         Attribute('n_filt'),  # = n_chan * depth_multiplier
+        Attribute('n_chan_conv'),
         Attribute('filt_width'),
         Attribute('stride_width'),
         Attribute('pad_left'),
@@ -582,6 +587,7 @@ class DepthwiseConv1D(Conv1D):
         )
 
         self.add_bias(quantizer=self.get_attr('bias_quantizer'))
+        self.set_attr('n_chan_conv', self.get_attr('n_chan'))
 
 
 class Conv2D(Layer):
@@ -592,6 +598,7 @@ class Conv2D(Layer):
         Attribute('out_width'),
         Attribute('n_chan'),
         Attribute('n_filt'),
+        Attribute('n_chan_conv'),
         Attribute('filt_height'),
         Attribute('filt_width'),
         Attribute('stride_height'),
@@ -616,6 +623,7 @@ class Conv2D(Layer):
         self.add_output_variable(shape, dims)
         self.add_weights(quantizer=self.get_attr('weight_quantizer'))
         self.add_bias(quantizer=self.get_attr('bias_quantizer'))
+        self.set_attr('n_chan_conv', self.get_attr('n_chan'))
 
 
 class Conv2DBatchnorm(Conv2D):
@@ -678,6 +686,7 @@ class SeparableConv2D(Layer):
         Attribute('out_width'),
         Attribute('n_chan'),
         Attribute('n_filt'),
+        Attribute('n_chan_conv'),
         Attribute('depth_multiplier', default=1),
         Attribute('filt_height'),
         Attribute('filt_width'),
@@ -707,6 +716,7 @@ class SeparableConv2D(Layer):
         self.add_weights_variable(name='depthwise', var_name='d{index}', quantizer=self.get_attr('depthwise_quantizer'))
         self.add_weights_variable(name='pointwise', var_name='p{index}', quantizer=self.get_attr('pointwise_quantizer'))
 
+        self.set_attr('n_chan_conv', self.get_attr('n_chan')*self.get_attr('depth_multiplier'))
         zero_bias_data = np.zeros((self.attributes['n_chan'],))
         precision = IntegerPrecisionType(width=1, signed=False)
         self.add_weights_variable(name='zero_bias', var_name='z{index}', data=zero_bias_data, precision=precision)
@@ -727,6 +737,7 @@ class DepthwiseConv2D(Conv2D):
         Attribute('n_chan'),
         Attribute('depth_multiplier', default=1),
         Attribute('n_filt'),  # = n_chan * depth_multiplier
+        Attribute('n_chan_conv'),
         Attribute('filt_height'),
         Attribute('filt_width'),
         Attribute('stride_height'),
@@ -763,6 +774,7 @@ class DepthwiseConv2D(Conv2D):
         )
 
         self.add_bias(quantizer=self.get_attr('bias_quantizer'))
+        self.set_attr('n_chan_conv', self.get_attr('n_chan'))
 
 
 class Pooling1D(Layer):

@@ -1,24 +1,10 @@
 #################
 #    HLS4ML
 #################
-array set opt {
-  reset      0
-  csim       0
-  synth      1
-  cosim      0
-  validation 0
-  vhdl       1
-  verilog    1
-  export     0
-  vsynth     0
-  bitfile    0
-  fifo_opt   0
-  ran_frame  2
-  sw_opt     0
-  power      0
-  da         0
-  bup        0
-}
+
+# Insert BuildOptions - default values come from config
+# but may be overridden in hlsmodel.build() args
+#hls-fpga-machine-learning insert build_options
 
 # Get pathname to this script to use as dereference path for relative file pathnames
 set sfd [file dirname [info script]]
@@ -26,19 +12,29 @@ set sfd [file dirname [info script]]
 if { [info exists ::argv] } {
   foreach arg $::argv {
     foreach {optname optval} [split $arg '='] {}
-    if { [info exists opt($optname)] } {
+    # map depricated option names to new names
+    set mapping {"cosim" "SCVerify" "validation" "SCVerify" "synth" "Synth" "vsynth" "RTLSynth" "ran_frame" "RandomTBFrames" "sw_opt" "PowerEst" "power" "PowerOpt" "da" "LaunchDA" "bup" "BuildBUP"}
+    set pos [lsearch -exact $mapping $optname]
+    if { ($pos != -1) && ([expr $pos % 2] == 0) } {
+      set oldoptname $optname
+      set optname [lindex $mapping [expr $pos + 1]]
+      logfile message "HLS4ML build() option '$oldoptname' is being depricated. Use '$optname'\n" warning
+    }
+    if { [info exists BuildOptions($optname)] } {
       if {[string is integer -strict $optval]} {
-        set opt($optname) $optval
+        set BuildOptions($optname) $optval
       } else {
-        set opt($optname) [string is true -strict $optval]
+        set BuildOptions($optname) [string is true -strict $optval]
       }
+    } else {
+      logfile message "Unknown argv switch '$optname'\n" error
     }
   }
 }
 
 puts "***** INVOKE OPTIONS *****"
-foreach x [lsort [array names opt]] {
-  puts "[format {   %-20s %s} $x $opt($x)]"
+foreach x [lsort [array names BuildOptions]] {
+  puts "[format {   %-20s %s} $x $BuildOptions($x)]"
 }
 puts ""
 
@@ -51,6 +47,8 @@ proc report_time { op_name time_start time_end } {
 }
 
 proc setup_xilinx_part { part } {
+  global env
+
   # Map Xilinx PART into Catapult library names
   set part_sav $part
   set libname [lindex [library get /CONFIG/PARAMETERS/Vivado/PARAMETERS/Xilinx/PARAMETERS/*/PARAMETERS/*/PARAMETERS/$part/LIBRARIES/*/NAME -match glob -ret v] 0]
@@ -70,6 +68,11 @@ proc setup_xilinx_part { part } {
   solution library add Xilinx_RAMS
   solution library add Xilinx_ROMS
   solution library add Xilinx_FIFO
+  # Point to AMD/Xilinx/Vivado precompiled library cache  
+  if { [info exists env(XILINX_PCL_CACHE)] } {
+    options set /Flows/Vivado/PCL_CACHE $env(XILINX_PCL_CACHE)
+    solution options set /Flows/Vivado/PCL_CACHE $env(XILINX_PCL_CACHE)
+  }
 }
 
 
@@ -94,11 +97,11 @@ proc setup_asic_libs { args } {
 }
 
 options set Input/CppStandard {c++17}
-options set Input/CompilerFlags -DRANDOM_FRAMES=$opt(ran_frame)
+options set Input/CompilerFlags -DRANDOM_FRAMES=$BuildOptions(RandomTBFrames)
 options set Input/SearchPath {$MGC_HOME/shared/include/nnet_utils} -append
 options set ComponentLibs/SearchPath {$MGC_HOME/shared/pkgs/ccs_hls4ml} -append
 
-if {$opt(reset)} {
+if {$BuildOptions(reset)} {
   project load CATAPULT_DIR.ccs
   go new
 } else {
@@ -110,13 +113,14 @@ if {$opt(reset)} {
 # downgrade HIER-10
 options set Message/ErrorOverride HIER-10 -remove
 solution options set Message/ErrorOverride HIER-10 -remove
+options set Message/Hide HIER-10 -append
 
-if {$opt(vhdl)}    {
+if {$BuildOptions(vhdl)}    {
   options set Output/OutputVHDL true
 } else {
   options set Output/OutputVHDL false
 }
-if {$opt(verilog)} {
+if {$BuildOptions(verilog)} {
   options set Output/OutputVerilog true
 } else {
   options set Output/OutputVerilog false
@@ -149,18 +153,17 @@ set design_top myproject
 solution file add $sfd/firmware/myproject.cpp
 solution file add $sfd/myproject_test.cpp -exclude true
 
-# Parse parameters.h to determine config info to control directives/pragmas
+# Parse hls4ml_config.yml
+set Strategy latency
 set IOType io_stream
-if { ![file exists $sfd/firmware/parameters.h] } {
-  logfile message "Could not locate firmware/parameters.h. Unable to determine network configuration.\n" warning
+if { ![file exists $sfd/hls4ml_config.yml] } {
+  logfile message "Could not locate HLS4ML configuration file '$sfd/hls4ml_config.yml'. Unable to determine network configuration.\n" warning
 } else {
-  set pf [open "$sfd/firmware/parameters.h" "r"]
+  set pf [open "$sfd/hls4ml_config.yml" "r"]
   while {![eof $pf]} {
     gets $pf line
-    if { [string match {*io_type = nnet::io_stream*} $line] } {
-      set IOType io_stream
-      break
-    }
+    if { [regexp {\s+Strategy: (\w+)} $line all value] }     { set Strategy [string tolower $value] }
+    if { [regexp {IOType: (\w+)} $line all value] }          { set IOType [string tolower $value] }
   }
   close $pf
 }
@@ -176,12 +179,32 @@ set hls_clock_period 5
 
 go analyze
 
+# Workaround for io_parallel and separable conv2d
+if { $IOType == "io_parallel" } {
+  set inlines {}
+  set pooling2d_used 0
+  foreach fn [solution get /SOURCEHIER/FUNC_HBS/* -match glob -ret l -checkpath 0] {
+    if { [string match {nnet::*} $fn] }             { lappend inlines $fn }
+    if { [string match {nnet::pooling2d_cl*} $fn] } { set pooling2d_used 1 }
+    if { [string match {ac::fx_div*} $fn] }         { lappend inlines $fn }
+  }
+  foreach fn $inlines {
+    set old [solution design get $fn]
+    logfile message "solution design set $fn -inline\n" warning
+    solution design set $fn -inline
+  }
+  if { $pooling2d_used } {
+    # Need to enable this since pooling2d_cl has some division operations in it
+    directive set -SCHED_USE_MULTICYCLE true
+  }
+}
+
 # NORMAL TOP DOWN FLOW
-if { ! $opt(bup) } {
+if { ! $BuildOptions(BuildBUP) } {
 
 go compile
 
-if {$opt(csim)} {
+if {$BuildOptions(csim)} {
   puts "***** C SIMULATION *****"
   set time_start [clock clicks -milliseconds]
   flow run /SCVerify/launch_make ./scverify/Verify_orig_cxx_osci.mk {} SIMTOOL=osci sim
@@ -194,7 +217,7 @@ puts "***** SETTING TECHNOLOGY LIBRARIES *****"
 
 directive set -CLOCKS [list clk [list -CLOCK_PERIOD $hls_clock_period -CLOCK_EDGE rising -CLOCK_OFFSET 0.000000 -CLOCK_UNCERTAINTY 0.0 -RESET_KIND sync -RESET_SYNC_NAME rst -RESET_SYNC_ACTIVE high -RESET_ASYNC_NAME arst_n -RESET_ASYNC_ACTIVE low -ENABLE_NAME {} -ENABLE_ACTIVE high]]
 
-if {$opt(synth)} {
+if {$BuildOptions(Synth)} {
   puts "***** C/RTL SYNTHESIS *****"
   set time_start [clock clicks -milliseconds]
 
@@ -241,7 +264,7 @@ if {$opt(synth)} {
   solution design set $top -top
   go compile
 
-  if {$opt(csim)} {
+  if {$BuildOptions(csim)} {
     puts "***** C SIMULATION *****"
     set time_start [clock clicks -milliseconds]
     flow run /SCVerify/launch_make ./scverify/Verify_orig_cxx_osci.mk {} SIMTOOL=osci sim
@@ -299,54 +322,55 @@ if {$opt(synth)} {
 
 project save
 
-if {$opt(cosim) || $opt(validation)} {
-  if {$opt(verilog)} {
+if {$BuildOptions(SCVerify) } {
+  if {$BuildOptions(verilog)} {
     flow run /SCVerify/launch_make ./scverify/Verify_rtl_v_msim.mk {} SIMTOOL=msim sim
   }
-  if {$opt(vhdl)} {
+  if {$BuildOptions(vhdl)} {
     flow run /SCVerify/launch_make ./scverify/Verify_rtl_vhdl_msim.mk {} SIMTOOL=msim sim
   }
 }
 
-if {$opt(export)} {
-  puts "***** EXPORT IP *****"
-  set time_start [clock clicks -milliseconds]
-# Not yet implemented. Do we need to include value of $version ?
-#  flow package option set /Vivado/BoardPart xilinx.com:zcu102:part0:3.1
-#  flow package option set /Vivado/IP_Taxonomy {/Catapult}
-#  flow run /Vivado/launch_package_ip -shell ./vivado_concat_v/concat_v_package_ip.tcl
-  set time_end [clock clicks -milliseconds]
-  report_time "EXPORT IP" $time_start $time_end
-}
-if {$opt(sw_opt)} {
+if {$BuildOptions(PowerEst)} {
   puts "***** Pre Power Optimization *****"
   go switching
-  if {$opt(verilog)} {
+  if {$BuildOptions(verilog)} {
     flow run /PowerAnalysis/report_pre_pwropt_Verilog
   }
-  if {$opt(vhdl)} {
+  if {$BuildOptions(vhdl)} {
     flow run /PowerAnalysis/report_pre_pwropt_VHDL
   }
 }
 
-if {$opt(power)} {
+if {$BuildOptions(PowerOpt)} {
   puts "***** Power Optimization *****"
   go power
 }
 
-if {$opt(vsynth)} {
-  puts "***** VIVADO SYNTHESIS *****"
-  set time_start [clock clicks -milliseconds]
-  flow run /Vivado/synthesize -shell vivado_concat_v/concat_rtl.v.xv
-  set time_end [clock clicks -milliseconds]
-  report_time "VIVADO SYNTHESIS" $time_start $time_end
+if {$BuildOptions(RTLSynth)} {
+  # find last RTL synthesis script created (either extract or power stage)
+  set launch {}
+  foreach {p v} [solution get /OUTPUTFILES/.../FILETYPE -match glob -rec 1 -ret pv] {
+    if { $v == "SYNTHESIS" } {
+      set p1 [file dirname $p]
+      set nettype [string tolower [solution get $p1/DEPENDENCIES/1/FILETYPE -checkpath 0]]
+      if { [info exists BuildOptions($nettype)] && $BuildOptions($nettype) } {
+        set launch [lindex [lindex [solution get $p1/FLOWS] 0] 1]
+      }
+    }
+  }
+  if { $launch != {} } {
+    puts "***** RTL SYNTHESIS *****"
+    set time_start [clock clicks -milliseconds]
+    eval flow run $launch
+    set time_end [clock clicks -milliseconds]
+    report_time "RTL SYNTHESIS" $time_start $time_end
+  } else {
+    logfile message "RTL Synthesis flow lookup failed\n" warning
+  }
 }
 
-if {$opt(bitfile)} {
-  puts "***** Option bitfile not supported yet *****"
-}
-
-if {$opt(da)} {
+if {$BuildOptions(LaunchDA)} {
   puts "***** Launching DA *****"
   flow run /DesignAnalyzer/launch
 }

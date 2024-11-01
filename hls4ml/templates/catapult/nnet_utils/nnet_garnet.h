@@ -2,7 +2,7 @@
 #ifndef NNET_GARNET_H_
 #define NNET_GARNET_H_
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include "hls_math.h"
 #include "nnet_common.h"
 

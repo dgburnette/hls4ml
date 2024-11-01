@@ -32,7 +32,7 @@ conv1d_config_template = """struct config{index} : nnet::conv1d_config {{
     static const unsigned pad_left = {pad_left};
     static const unsigned pad_right = {pad_right};
     static const unsigned in_width = {in_width};
-    static const unsigned n_chan = {n_chan};
+    static const unsigned n_chan = {n_chan_conv};
     static const unsigned filt_width = {filt_width};
     static const unsigned kernel_size = filt_width;
     static const unsigned n_filt = {n_filt};
@@ -59,7 +59,48 @@ conv1d_config_template = """struct config{index} : nnet::conv1d_config {{
     template<unsigned K, unsigned S, unsigned W>
     using scale_index = nnet::{scale_index_type}<K, S, W>;
 }};
-// really this allocation of pixels array ought to be in a .cpp file
+// // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
+// Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
+#ifndef INCLUDED_MC_TESTBENCH_H
+const ac_int<config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
+#endif\n"""
+
+depthwiseconv1d_config_template = """struct config{index} : nnet::depthwiseconv1d_config {{
+    static const unsigned pad_left = {pad_left};
+    static const unsigned pad_right = {pad_right};
+    static const unsigned in_width = {in_width};
+    static const unsigned n_chan = {n_chan};
+    static const unsigned filt_width = {filt_width};
+    static const unsigned kernel_size = filt_width;
+    static const unsigned d_mult = {depth_multiplier};
+    static const unsigned n_filt = d_mult * n_chan;
+    static const unsigned stride_width = {stride_width};
+    static const unsigned dilation = {dilation};
+    static const unsigned out_width = {out_width};
+    static const unsigned reuse_factor = {reuse};
+    static const unsigned n_zeros = {nzeros};
+    static const unsigned multiplier_limit =
+        DIV_ROUNDUP(kernel_size * n_chan * n_filt, reuse_factor) - n_zeros / reuse_factor;
+    static const bool store_weights_in_bram = false;
+    static const unsigned strategy = nnet::{strategy};
+    static const nnet::conv_implementation implementation = nnet::conv_implementation::{implementation};
+    static const unsigned min_width = {min_width};
+    static const ac_int<filt_width,false> pixels[min_width];
+    static const unsigned n_partitions = {n_partitions};
+    static const unsigned n_pixels = out_width / n_partitions;
+    template<class data_T, class CONFIG_T>
+    using fill_buffer = nnet::{fill_fn}<data_T, CONFIG_T>;
+    typedef {accum_t.name} accum_t;
+    typedef {bias_t.name} bias_t;
+    typedef {weight_t.name} weight_t;
+    typedef {config_t} mult_config;
+    template<unsigned K, unsigned S, unsigned W>
+    using scale_index = nnet::{scale_index_type}<K, S, W>;
+}};
+// // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
+// Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
 #ifndef INCLUDED_MC_TESTBENCH_H
 const ac_int<config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
 #endif\n"""
@@ -121,6 +162,40 @@ class Conv1DFunctionTemplate(FunctionCallTemplate):
 
         return self.template.format(**params)
 
+class DepthwiseConv1DConfigTemplate(LayerConfigTemplate):
+    def __init__(self):
+        super().__init__((DepthwiseConv1D))
+        self.template = depthwiseconv1d_config_template
+        self.mult_template = conv_mult_config_template
+
+    def format(self, node):
+        params = self._default_config_params(node)
+        params['dilation'] = node.get_attr('dilation', 1)
+        params['nzeros'] = node.get_weights('weight').nzeros
+
+        params['config_t'] = f'config{node.index}_mult'
+        if node.get_attr('in_width') == node.get_attr('min_width'):
+            params['scale_index_type'] = 'scale_index_unscaled'
+        else:
+            params['scale_index_type'] = 'scale_index_regular'
+
+        if node.model.config.get_config_value('IOType') == 'io_parallel':
+            params['fill_fn'] = f'fill_buffer_{node.index}'
+        else:
+            params['fill_fn'] = 'FillConv1DBuffer'
+
+        conv_config = self.template.format(**params)
+
+        mult_params = self._default_config_params(node)
+        mult_params['n_in'] = node.get_attr('n_chan') * node.get_attr('filt_width')
+        mult_params['n_out'] = node.get_attr('n_filt')
+        mult_params['nzeros'] = node.get_weights('weight').nzeros
+        mult_params['product_type'] = get_backend('catapult').product_type(
+            node.get_input_variable().type.precision, node.get_weights('weight').type.precision
+        )
+        mult_config = self.mult_template.format(**mult_params)
+
+        return mult_config + '\n' + conv_config
 
 class DepthwiseConv1DFunctionTemplate(Conv1DFunctionTemplate):
     def __init__(self):
@@ -137,7 +212,7 @@ conv2d_config_template = """struct config{index} : nnet::conv2d_config {{
     static const unsigned pad_right = {pad_right};
     static const unsigned in_height = {in_height};
     static const unsigned in_width = {in_width};
-    static const unsigned n_chan = {n_chan};
+    static const unsigned n_chan = {n_chan_conv};
     static const unsigned filt_height = {filt_height};
     static const unsigned filt_width = {filt_width};
     static const unsigned kernel_size = filt_height * filt_width;
@@ -169,7 +244,57 @@ conv2d_config_template = """struct config{index} : nnet::conv2d_config {{
     template<unsigned K, unsigned S, unsigned W>
     using scale_index_width = nnet::{scale_index_width_type}<K, S, W>;
 }};
-// really this allocation of pixels array ought to be in a .cpp file
+
+// // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
+// Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
+#ifndef INCLUDED_MC_TESTBENCH_H
+const ac_int<config{index}::filt_height * config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
+#endif\n"""
+
+depthwiseconv2d_config_template = """struct config{index} : nnet::depthwiseconv2d_config {{
+    static const unsigned pad_top = {pad_top};
+    static const unsigned pad_bottom = {pad_bottom};
+    static const unsigned pad_left = {pad_left};
+    static const unsigned pad_right = {pad_right};
+    static const unsigned in_height = {in_height};
+    static const unsigned in_width = {in_width};
+    static const unsigned n_chan = {n_chan};
+    static const unsigned filt_height = {filt_height};
+    static const unsigned filt_width = {filt_width};
+    static const unsigned kernel_size = filt_height * filt_width;
+    static const unsigned d_mult = {depth_multiplier};
+    static const unsigned n_filt = d_mult * n_chan;
+    static const unsigned stride_height = {stride_height};
+    static const unsigned stride_width = {stride_width};
+    static const unsigned out_height = {out_height};
+    static const unsigned out_width = {out_width};
+    static const unsigned reuse_factor = {reuse};
+    static const unsigned n_zeros = {nzeros};
+    static const unsigned multiplier_limit =
+        DIV_ROUNDUP(kernel_size * n_chan * n_filt, reuse_factor) - n_zeros / reuse_factor;
+    static const bool store_weights_in_bram = false;
+    static const unsigned strategy = nnet::{strategy};
+    static const nnet::conv_implementation implementation = nnet::conv_implementation::{implementation};
+    static const unsigned min_height = {min_height};
+    static const unsigned min_width = {min_width};
+    static const ac_int<filt_height * filt_width,false> pixels[min_height * min_width];
+    static const unsigned n_partitions = {n_partitions};
+    static const unsigned n_pixels = out_height * out_width / n_partitions;
+    template<class data_T, class CONFIG_T>
+    using fill_buffer = nnet::{fill_fn}<data_T, CONFIG_T>;
+    typedef {accum_t.name} accum_t;
+    typedef {bias_t.name} bias_t;
+    typedef {weight_t.name} weight_t;
+    typedef {config_t} mult_config;
+    template<unsigned K, unsigned S, unsigned W>
+    using scale_index_height = nnet::{scale_index_height_type}<K, S, W>;
+    template<unsigned K, unsigned S, unsigned W>
+    using scale_index_width = nnet::{scale_index_width_type}<K, S, W>;
+}};
+// // Note: This code section, responsible for the allocation of the pixels array, should ideally be in a .cpp file.
+// Currently, the array is initialized to zeros due to the lack of support for conv2d_encoded operations.
+// This is a temporary solution and will be updated once support for conv2d_encoded is implemented. 
 #ifndef INCLUDED_MC_TESTBENCH_H
 const ac_int<config{index}::filt_height * config{index}::filt_width,false> config{index}::pixels[] = {{{instructions}}};
 #endif\n"""
@@ -223,6 +348,46 @@ class Conv2DConfigTemplate(LayerConfigTemplate):
 
         return mult_config + '\n' + conv_config
 
+class DepthwiseConv2DConfigTemplate(LayerConfigTemplate):
+    def __init__(self):
+        super().__init__(DepthwiseConv2D)
+        self.template = depthwiseconv2d_config_template
+        self.mult_template = conv_mult_config_template
+
+    def format(self, node):
+        params = self._default_config_params(node)
+        params['dilation'] = node.get_attr('dilation', 1)
+        params['nzeros'] = node.get_weights('weight').nzeros
+
+        params['config_t'] = f'config{node.index}_mult'
+
+        if node.get_attr('in_height') == node.get_attr('min_height'):
+            params['scale_index_height_type'] = 'scale_index_unscaled'
+        else:
+            params['scale_index_height_type'] = 'scale_index_regular'
+
+        if node.get_attr('in_width') == node.get_attr('min_width'):
+            params['scale_index_width_type'] = 'scale_index_unscaled'
+        else:
+            params['scale_index_width_type'] = 'scale_index_regular'
+
+        if node.model.config.get_config_value('IOType') == 'io_parallel':
+            params['fill_fn'] = f'fill_buffer_{node.index}'
+        else:
+            params['fill_fn'] = 'FillConv2DBuffer'
+
+        conv_config = self.template.format(**params)
+
+        mult_params = self._default_config_params(node)
+        mult_params['n_in'] = node.get_attr('n_chan') * node.get_attr('filt_height') * node.get_attr('filt_width')
+        mult_params['n_out'] = node.get_attr('n_filt')
+        mult_params['nzeros'] = node.get_weights('weight').nzeros
+        mult_params['product_type'] = get_backend('catapult').product_type(
+            node.get_input_variable().type.precision, node.get_weights('weight').type.precision
+        )
+        mult_config = self.mult_template.format(**mult_params)
+
+        return mult_config + '\n' + conv_config
 
 class Conv2DFunctionTemplate(FunctionCallTemplate):
     def __init__(self):
@@ -268,7 +433,7 @@ class SeparableConv1DConfigTemplate(LayerConfigTemplate):
     def __init__(self):
         super().__init__(SeparableConv1D)
         self.template = sepconv_config_template
-        self.depthwise_template = conv1d_config_template
+        self.depthwise_template = depthwiseconv1d_config_template
         self.pointwise_template = conv1d_config_template
         self.depthwise_mult_template = conv_mult_config_template
         self.pointwise_mult_template = conv_mult_config_template
@@ -341,7 +506,7 @@ class SeparableConv1DConfigTemplate(LayerConfigTemplate):
         # Pointwise mult config
         mult_params = self._default_config_params(node)
         mult_params['index'] = str(node.index) + '_pointwise'
-        mult_params['n_in'] = node.get_attr('n_chan')
+        mult_params['n_in'] = node.get_attr('n_chan_conv')
         mult_params['n_out'] = node.get_attr('n_filt')
         mult_params['nzeros'] = node.get_weights('pointwise').nzeros
         mult_params['weight_t'] = node.get_weights('pointwise').type
@@ -384,7 +549,7 @@ class SeparableConv2DConfigTemplate(LayerConfigTemplate):
     def __init__(self):
         super().__init__(SeparableConv2D)
         self.template = sepconv_config_template
-        self.depthwise_template = conv2d_config_template
+        self.depthwise_template = depthwiseconv2d_config_template
         self.pointwise_template = conv2d_config_template
         self.depthwise_mult_template = conv_mult_config_template
         self.pointwise_mult_template = conv_mult_config_template
@@ -469,7 +634,7 @@ class SeparableConv2DConfigTemplate(LayerConfigTemplate):
         # Pointwise mult config
         mult_params = self._default_config_params(node)
         mult_params['index'] = str(node.index) + '_pointwise'
-        mult_params['n_in'] = node.get_attr('n_chan')
+        mult_params['n_in'] = node.get_attr('n_chan_conv')
         mult_params['n_out'] = node.get_attr('n_filt')
         mult_params['nzeros'] = node.get_weights('pointwise').nzeros
         mult_params['weight_t'] = node.get_weights('pointwise').type

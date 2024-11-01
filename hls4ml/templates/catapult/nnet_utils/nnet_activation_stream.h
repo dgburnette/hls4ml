@@ -7,8 +7,8 @@
 #ifndef NNET_ACTIVATION_STREAM_H_
 #define NNET_ACTIVATION_STREAM_H_
 
-#include "ac_channel.h"
-#include "ac_fixed.h"
+#include <ac_channel.h>
+#include <ac_fixed.h>
 #include "nnet_activation.h"
 #include "nnet_common.h"
 #include "nnet_stream.h"
@@ -38,7 +38,7 @@ LinearActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     LinearPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -60,7 +60,7 @@ ReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     ReLUPackLoop:
         for (unsigned int j = 0; j < res_T::size; j++) {
@@ -104,7 +104,7 @@ SigmoidActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     SigmoidPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -443,7 +443,7 @@ TanHActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     TanHPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -494,7 +494,7 @@ HardSigmoidActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     HardSigmoidPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -516,8 +516,8 @@ HardSigmoidActLoop:
 // *************************************************
 
 template <class data_T, class res_T, typename CONFIG_T> void hard_tanh(ac_channel<data_T> &data, ac_channel<res_T> &res) {
-    // typename data_T::value_type slope = (typename data_T::value_type) 0.2;
-    // typename data_T::value_type shift = (typename data_T::value_type) 0.5;
+// typename data_T::value_type slope = (typename data_T::value_type) 0.2;
+// typename data_T::value_type shift = (typename data_T::value_type) 0.5;
 
 HardTanhActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
@@ -525,7 +525,7 @@ HardTanhActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        // PRAGMA_DATA_PACK(out_data)
+    // PRAGMA_DATA_PACK(out_data)
 
     HardTanhPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -545,15 +545,15 @@ HardTanhActLoop:
 // *************************************************
 //       Leaky RELU Activation
 // *************************************************
-template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void leaky_relu(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T> &res) {
+template <class data_T, class res_T, typename CONFIG_T>
+void leaky_relu(ac_channel<data_T> &data, typename data_T::value_type alpha, ac_channel<res_T> &res) {
 LeakyReLUActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         //#pragma HLS PIPELINE
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     LeakyReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -571,15 +571,15 @@ LeakyReLUActLoop:
 //       Thresholded RELU Activation
 // *************************************************
 
-template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void thresholded_relu(ac_channel<data_T> &data, param_T theta, ac_channel<res_T> &res) {
+template <class data_T, class res_T, typename CONFIG_T>
+void thresholded_relu(ac_channel<data_T> &data, typename data_T::value_type theta, ac_channel<res_T> &res) {
 ThresholdedReLUActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         //#pragma HLS PIPELINE
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     ThresholdedReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -620,7 +620,7 @@ SoftplusActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     SoftplusPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -680,7 +680,7 @@ SoftsignActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     SoftsignPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -720,8 +720,8 @@ SoftsignActLoop:
 
 #ifndef USE_AC_MATH
 
-template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void elu(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T> &res) {
+template <class data_T, class res_T, typename CONFIG_T>
+void elu(ac_channel<data_T> &data, typename data_T::value_type alpha, ac_channel<res_T> &res) {
     // Initialize the lookup table
 #ifdef __HLS_SYN__
     bool initialized = false;
@@ -742,7 +742,7 @@ EluActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     EluPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -763,8 +763,8 @@ EluActLoop:
 }
 
 #else
-template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void elu(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T> &res) {
+template <class data_T, class res_T, typename CONFIG_T>
+void elu(ac_channel<data_T> &data, typename data_T::value_type alpha, ac_channel<res_T> &res) {
 EluActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         data_T in_data = data.read();
@@ -805,7 +805,7 @@ SeluActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     SeluPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -845,15 +845,15 @@ SeluActLoop:
 // *************************************************
 //       PReLU Activation
 // *************************************************
-template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void prelu(ac_channel<data_T> &data, const param_T alpha[CONFIG_T::n_in], ac_channel<res_T> &res) {
+template <class data_T, class res_T, typename CONFIG_T>
+void prelu(ac_channel<data_T> &data, typename data_T::value_type alpha[CONFIG_T::n_in], ac_channel<res_T> &res) {
 PReLUActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         //#pragma HLS PIPELINE
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     PReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -877,7 +877,7 @@ PReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     PReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {
@@ -901,7 +901,7 @@ PReLUActLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     PReLUPackLoop:
         for (int j = 0; j < res_T::size; j++) {

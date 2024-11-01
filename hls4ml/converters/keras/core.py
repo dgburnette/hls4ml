@@ -1,4 +1,5 @@
 from hls4ml.converters.keras_to_hls import get_weights_data, keras_handler, parse_default_keras_layer
+from hls4ml.converters.utils import parse_data_format
 from hls4ml.model.quantizers import BinaryQuantizer, TernaryQuantizer
 from hls4ml.model.types import IntegerPrecisionType
 
@@ -59,6 +60,12 @@ def parse_activation_layer(keras_layer, input_names, input_shapes, data_reader):
     assert keras_layer['class_name'] in activation_layers
 
     layer = parse_default_keras_layer(keras_layer, input_names)
+    shape = parse_data_format(input_shapes[0], layer['data_format'])
+    if shape is not None:
+        if len(shape) == 3:
+            (layer['in_height'], layer['in_width'], layer['n_chan']) = shape
+        elif len(shape) == 2:
+            (layer['in_width'], layer['n_chan']) = shape
 
     if layer['class_name'] != 'Activation':
         layer['activation'] = layer['class_name']

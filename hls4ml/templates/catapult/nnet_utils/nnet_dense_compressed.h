@@ -20,7 +20,7 @@
 #ifndef NNET_COMPRESSED_LAYER_H_
 #define NNET_COMPRESSED_LAYER_H_
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_dense.h"
 #include <math.h>
@@ -65,7 +65,7 @@ ReuseLoop:
         //#pragma HLS PIPELINE  II=1 rewind
 
         typename CONFIG_T::accum_t mult[CONFIG_T::n_out];
-        //#pragma HLS ARRAY_PARTITION variable=mult complete
+    //#pragma HLS ARRAY_PARTITION variable=mult complete
 
     ResetMult:
         for (int imult = 0; imult < CONFIG_T::n_out; imult++) {

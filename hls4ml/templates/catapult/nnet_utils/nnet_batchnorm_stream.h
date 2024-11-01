@@ -2,7 +2,7 @@
 #ifndef NNET_BATCHNORM_STREAM_H_
 #define NNET_BATCHNORM_STREAM_H_
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_mult.h"
 #include "nnet_types.h"
@@ -30,7 +30,7 @@ BatchNormLoop:
 
         data_T in_data = data.read();
         res_T out_data;
-        //#pragma HLS DATA_PACK variable=out_data
+    //#pragma HLS DATA_PACK variable=out_data
 
     BatchNormpack:
         for (unsigned int j = 0; j < data_T::size; j++) {

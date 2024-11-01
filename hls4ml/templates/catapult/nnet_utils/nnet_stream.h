@@ -2,7 +2,7 @@
 #ifndef NNET_STREAM_H
 #define NNET_STREAM_H
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 
 namespace nnet {
 

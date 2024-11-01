@@ -2,7 +2,7 @@
 #define NNET_POOLING_STREAM_H_
 
 // #include "utils/x_hls_utils.h"
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include "ap_shift_reg.h"
 #include "nnet_common.h"
 #include "nnet_conv_stream.h"
@@ -128,8 +128,8 @@ PixelLoop:
 
 template <class data_T, class res_T, typename CONFIG_T>
 void pooling2d_encoded_cl(ac_channel<data_T> &data, ac_channel<res_T> &res) {
-    assert(CONFIG_T::pad_top == 0 && CONFIG_T::pad_bottom == 0 && CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
-    assert(CONFIG_T::pool_height == CONFIG_T::stride_height && CONFIG_T::pool_width == CONFIG_T::stride_width);
+    static_assert(CONFIG_T::pad_top == 0 && CONFIG_T::pad_bottom == 0 && CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0, "Padding mode 'same' is only supported when pool size equals stride size. Ensure pool_height == stride_height and pool_width == stride_width.");
+
 
     res_T res_pack;
     //#pragma HLS DATA_PACK variable=res_pack
@@ -230,8 +230,7 @@ void compute_pool_buffer_2d(const data_T &in_elem,
 
 template <class data_T, class res_T, typename CONFIG_T>
 void pooling2d_buffer_cl(ac_channel<data_T> &data, ac_channel<res_T> &res) {
-    assert(CONFIG_T::pad_top == 0 && CONFIG_T::pad_bottom == 0 && CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
-    assert(CONFIG_T::pool_height == CONFIG_T::stride_height && CONFIG_T::pool_width == CONFIG_T::stride_width);
+    static_assert(CONFIG_T::pad_top == 0 && CONFIG_T::pad_bottom == 0 && CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0, "Padding mode 'same' is only supported when pool size equals stride size. Ensure pool_height == stride_height and pool_width == stride_width.");
 
     static ap_shift_reg<typename data_T::value_type, CONFIG_T::in_width> line_buffer[MAX(CONFIG_T::pool_height - 1, 1)]
                                                                                     [CONFIG_T::n_filt];

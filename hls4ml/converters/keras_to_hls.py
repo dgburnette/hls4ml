@@ -3,6 +3,7 @@ import json
 import h5py
 
 from hls4ml.model import ModelGraph
+from hls4ml.converters.utils import parse_data_format
 
 MAXMULT = 4096
 
@@ -308,6 +309,14 @@ def parse_keras_model(model_arch, reader):
             else:
                 act_layer['class_name'] = 'Activation'
                 act_layer['config'] = {'name': layer['name'] + '_' + act_details, 'activation': act_details}
+
+                shape = parse_data_format(input_shapes[0], layer['data_format'])
+                if shape is not None:
+                    if len(shape) == 3:
+                        (act_layer['in_height'], act_layer['in_width'], act_layer['n_chan']) = shape
+                    elif len(shape) == 2:
+                        (act_layer['in_width'], act_layer['n_chan']) = shape
+
             act_layer, output_shape = layer_handlers[act_layer['class_name']](act_layer, None, [output_shape], reader)
             inputs_map[layer['name']] = act_layer['name']
             if output_layers is not None and layer['name'] in output_layers:

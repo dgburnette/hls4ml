@@ -1,7 +1,8 @@
 #ifndef NNET_CONV2D_STREAM_H_
 #define NNET_CONV2D_STREAM_H_
 
-#include "ac_channel.h"
+#include <ac_channel.h>
+#include <ac_sync.h>
 #include "ap_shift_reg.h"
 #include "nnet_common.h"
 #include "nnet_conv_stream.h"
@@ -101,7 +102,12 @@ template <class data_T, class res_T, typename CONFIG_T>
 void conv_2d_cl(
     ac_channel<data_T> &data, ac_channel<res_T> &res,
     typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
-    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
+    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt],ac_sync &sync_w,ac_sync &sync_b) {
+		
+	//#pragma HLS inline region
+	sync_w.sync_in(weights);
+	sync_b.sync_in(biases);	
+		
     //#pragma HLS inline region
     switch (CONFIG_T::implementation) {
     case conv_implementation::linebuffer:
@@ -112,6 +118,24 @@ void conv_2d_cl(
         break;
     }
 }
+
+template <class data_T, class res_T, typename CONFIG_T>
+void conv_2d_cl(
+    ac_channel<data_T> &data, ac_channel<res_T> &res,
+    typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
+    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
+			
+    //#pragma HLS inline region
+    switch (CONFIG_T::implementation) {
+    case conv_implementation::linebuffer:
+        conv_2d_buffer_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+        break;
+    case conv_implementation::encoded:
+        conv_2d_encoded_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+        break;
+    }
+}
+
 
 } // namespace nnet
 #endif

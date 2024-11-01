@@ -34,7 +34,7 @@ int compute_multiplier_limit(
         }                 // end filter loop
     }                     // end output loop
 
-    return ceil(float(n_mult) / float(CONFIG_T::reuse_factor));
+    return DIV_ROUNDUP(n_mult, CONFIG_T::reuse_factor);
 
 } // end compute_n_mult
 

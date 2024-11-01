@@ -1,3 +1,5 @@
+from copy import copy
+from hls4ml.backends.fpga.fpga_layers import PointwiseConv1D, PointwiseConv2D
 from hls4ml.backends.catapult.passes.convolution_templates import (
     Conv1DConfigTemplate,
     Conv1DFunctionTemplate,
@@ -7,7 +9,6 @@ from hls4ml.backends.catapult.passes.convolution_templates import (
     conv2d_config_template,
     conv_mult_config_template,
 )
-from hls4ml.backends.fpga.fpga_layers import PointwiseConv1D, PointwiseConv2D
 from hls4ml.model.layers import register_layer
 from hls4ml.model.optimizer import OptimizerPass
 
@@ -73,6 +74,7 @@ class OptimizePointwiseConv(OptimizerPass):
 
     def transform(self, model, node):
         dim = node.__class__.__name__[-2:]  # '1D' or '2D'
+        # to remove warning, since these get set again
         new_attrs = {k: v for k, v in node.attributes.items() if k not in ('trace', 'precision', 'reuse_factor')}
         pw_node = model.make_node(
             'PointwiseConv' + dim, node.name, new_attrs, node.inputs.copy(), outputs=node.outputs.copy()

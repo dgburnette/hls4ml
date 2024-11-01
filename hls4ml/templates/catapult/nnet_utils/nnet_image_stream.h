@@ -1,7 +1,7 @@
 #ifndef NNET_IMAGE_STREAM_H_
 #define NNET_IMAGE_STREAM_H_
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include "nnet_common.h"
 
 namespace nnet {
@@ -34,18 +34,18 @@ ImageHeight:
 
     ResizeHeight:
         for (unsigned i = 0; i < ratio_height; i++) {
-            //#pragma HLS UNROLL
+        //#pragma HLS UNROLL
 
         ImageWidth2:
             for (unsigned l = 0; l < CONFIG_T::width; l++) {
-                //#pragma HLS UNROLL
+            //#pragma HLS UNROLL
 
             ResizeWidth:
                 for (unsigned j = 0; j < ratio_width; j++) {
                     //#pragma HLS UNROLL
 
                     data_T out_data;
-                    //#pragma HLS DATA_PACK variable=out_data
+                //#pragma HLS DATA_PACK variable=out_data
 
                 ResizeChan:
                     for (unsigned k = 0; k < CONFIG_T::n_chan; k++) {

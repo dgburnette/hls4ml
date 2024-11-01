@@ -1,7 +1,7 @@
 #ifndef NNET_DENSE_H_
 #define NNET_DENSE_H_
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include "nnet_common.h"
 #include "nnet_dense_latency.h"
 #include "nnet_dense_resource.h"
