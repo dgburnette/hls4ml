@@ -207,8 +207,7 @@ void compute_pool_buffer_2d(const data_T &in_elem,
 
             // Compute Pooling
             res_pack[i_ic] =
-                reduce_pool<typename CONFIG_T::accum_t, CONFIG_T::pool_height * CONFIG_T::pool_width, CONFIG_T>(
-                    pool_window);
+                reduce_pool<typename CONFIG_T::accum_t, CONFIG_T::pool_height * CONFIG_T::pool_width, CONFIG_T>(pool_window);
         }
 
         // Write to output
