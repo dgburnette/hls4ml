@@ -16,6 +16,7 @@ void compute_scaled_indices_2d(const unsigned h_idx, const unsigned w_idx,
                                                                   CONFIG_T::in_height>::scale_index(h_idx);
     unsigned wp_idx = w_idx * (data_T::size / CONFIG_T::n_chan);
 
+#pragma hls_unroll
 ComputeIndex:
     for (unsigned p = 0; p < data_T::size / CONFIG_T::n_chan; p++) {
         // #pragma HLS UNROLL
@@ -35,12 +36,6 @@ void conv_2d_encoded_cl(
     assert(CONFIG_T::filt_height == CONFIG_T::filt_width);
 
     ac_channel<typename data_T::value_type> data_window[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
-    const int win_depth = CONFIG_T::filt_height * CONFIG_T::out_width;
-    for (unsigned i_out = 0; i_out < CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan; i_out++) {
-        //#pragma HLS STREAM variable=data_window[i_out] depth=win_depth
-    }
-
-    //#pragma HLS ARRAY_PARTITION variable=CONFIG_T::pixels complete
 
     res_T res_pack;
     //#pragma HLS DATA_PACK variable=res_pack
@@ -52,6 +47,7 @@ void conv_2d_encoded_cl(
     constexpr int ce_reuse_factor =
         CONFIG_T::reuse_factor * (CONFIG_T::strategy == nnet::latency && data_T::size / CONFIG_T::n_chan == 1);
     (void)ce_reuse_factor;
+    #pragma hls_pipeline_init_interval 1
 ReadInputHeight:
     for (unsigned i_ih = 0; i_ih < CONFIG_T::in_height; i_ih++) {
     ReadInputWidth:
@@ -81,6 +77,7 @@ void conv_2d_buffer_cl(
 
     constexpr int ce_reuse_factor = CONFIG_T::reuse_factor * (CONFIG_T::strategy == nnet::latency);
     (void)ce_reuse_factor;
+    #pragma hls_pipeline_init_interval 1
 ReadInputHeight:
     for (unsigned i_ih = 0; i_ih < CONFIG_T::in_height; i_ih++) {
     ReadInputWidth:
@@ -98,6 +95,7 @@ ReadInputHeight:
     }
 }
 
+#pragma hls_design
 template <class data_T, class res_T, typename CONFIG_T>
 void conv_2d_cl(
     ac_channel<data_T> &data, ac_channel<res_T> &res,
@@ -119,6 +117,7 @@ void conv_2d_cl(
     }
 }
 
+#pragma hls_design
 template <class data_T, class res_T, typename CONFIG_T>
 void conv_2d_cl(
     ac_channel<data_T> &data, ac_channel<res_T> &res,

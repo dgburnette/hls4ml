@@ -8,6 +8,7 @@
 
 namespace nnet {
 
+#pragma hls_design inline
 template <class data_T, class res_T, typename CONFIG_T>
 void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], res_T res[CONFIG_T::n_filt],
                        typename CONFIG_T::weight_t weights[CONFIG_T::kernel_size * CONFIG_T::n_filt],
@@ -23,6 +24,8 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
     //#pragma HLS PIPELINE II=CONFIG_T::reuse_factor
     constexpr int ce_reuse_factor = CONFIG_T::reuse_factor;
     (void)ce_reuse_factor;
+    #pragma hls_pipeline_init_interval ce_reuse_factor
+    #pragma hls_unroll
 
     // Add dummy loop to which the pipeline pragma can be applied
     do {
@@ -32,8 +35,10 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
         //#pragma HLS ALLOCATION operation instances=mul limit=CONFIG_T::multiplier_limit
 
     // Do the matrix-multiply
+    #pragma hls_unroll
     Product1:
         for (unsigned int ii = 0; ii < CONFIG_T::kernel_size * CONFIG_T::n_chan; ii++) {
+        #pragma hls_unroll
         Product2:
             for (unsigned int jj = 0; jj < CONFIG_T::d_mult; jj++) {
                 int index = ii * CONFIG_T::d_mult + jj;
@@ -44,6 +49,7 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
         }
 
     // Initialize accumulator with input biases
+    #pragma hls_unroll
     ResetAccum:
         for (unsigned int iacc = 0; iacc < CONFIG_T::n_filt; iacc++) {
             //#pragma HLS UNROLL
@@ -51,10 +57,13 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
         }
 
     // Accumulate multiplication result
+    #pragma hls_unroll
     Accum1:
         for (unsigned int ii = 0; ii < CONFIG_T::kernel_size; ii++) {
+        #pragma hls_unroll
         Accum2:
             for (unsigned int jj = 0; jj < CONFIG_T::n_chan; jj++) {
+            #pragma hls_unroll
             Accum3:
                 for (unsigned int kk = 0; kk < CONFIG_T::d_mult; kk++) {
                     int index1 = ii * CONFIG_T::n_chan * CONFIG_T::d_mult + jj * CONFIG_T::d_mult + kk;
@@ -65,6 +74,7 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
         }
 
     // Cast to "res_t" type
+    #pragma hls_unroll
     Result:
         for (unsigned int ires = 0; ires < CONFIG_T::n_filt; ires++) {
             //#pragma HLS UNROLL
@@ -73,6 +83,7 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
     } while (0);
 }
 
+#pragma hls_design inline
 template <class data_T, class res_T, typename CONFIG_T>
 void depthwise_mult_buffer(ac_channel<typename data_T::value_type> data_window[CONFIG_T::kernel_size * CONFIG_T::n_chan],
                            res_T &res_pack, ac_channel<res_T> &res_stream, unsigned &outputs_ready,
@@ -85,6 +96,7 @@ void depthwise_mult_buffer(ac_channel<typename data_T::value_type> data_window[C
     typename res_T::value_type res[CONFIG_T::n_chan];
     //#pragma HLS ARRAY_PARTITION variable=res complete
 
+    #pragma hls_unroll
 InitData:
     for (unsigned int id = 0; id < CONFIG_T::kernel_size * CONFIG_T::n_chan; id++) {
         //#pragma HLS UNROLL
@@ -98,6 +110,7 @@ InitData:
         assert("Resource strategy for DepthwiseConv2D is not supported." && false);
     }
 
+    #pragma hls_unroll
 CastLoop:
     for (unsigned jj = 0; jj < CONFIG_T::n_chan; jj++) {
         //#pragma HLS UNROLL
@@ -130,11 +143,15 @@ void compute_depthwise_output_encoded(
 
     constexpr int ce_reuse_factor = CONFIG_T::reuse_factor;
     (void)ce_reuse_factor;
+    #pragma hls_pipeline_init_interval ce_reuse_factor
+    #pragma hls_unroll
 MultLoop:
     for (unsigned p = 0; p < data_T::size / CONFIG_T::n_chan; p++) {
     //#pragma HLS PIPELINE II=CONFIG_T::reuse_factor
+    #pragma hls_unroll
     CopyDataFilt:
         for (unsigned f = 0; f < CONFIG_T::kernel_size; f++) {
+        #pragma hls_unroll
         //#pragma HLS UNROLL
         CopyDataChan:
             for (unsigned c = 0; c < CONFIG_T::n_chan; c++) {
@@ -149,6 +166,7 @@ MultLoop:
     }
 }
 
+#pragma hls_design inline
 template <class data_T, class res_T, typename CONFIG_T>
 void pointwise_mult_buffer(const data_T &data_pack, ac_channel<res_T> &res_stream,
                            typename CONFIG_T::weight_t weights[CONFIG_T::n_chan * CONFIG_T::n_filt],
@@ -164,6 +182,7 @@ void pointwise_mult_buffer(const data_T &data_pack, ac_channel<res_T> &res_strea
     res_T res_pack;
     // PRAGMA_DATA_PACK(res_pack)
 
+    #pragma hls_unroll
 InitData:
     for (int id = 0; id < CONFIG_T::n_chan; id++) {
         //#pragma HLS UNROLL
@@ -179,6 +198,7 @@ InitData:
             data, res, weights, biases);
     }
 
+    #pragma hls_unroll
 CastLoop:
     for (unsigned jj = 0; jj < CONFIG_T::n_filt; jj++) {
         //#pragma HLS UNROLL
@@ -189,6 +209,7 @@ CastLoop:
 }
 
 // Line Buffer Implementation (Phil's)
+#pragma hls_design inline
 template <class data_T, class res_T, typename CONFIG_T>
 void compute_depthwise_output_buffer_1d(const data_T &in_elem, ac_channel<res_T> &res_stream,
                                         typename CONFIG_T::weight_t weights[CONFIG_T::kernel_size * CONFIG_T::n_filt],
@@ -226,6 +247,7 @@ void compute_depthwise_output_buffer_1d(const data_T &in_elem, ac_channel<res_T>
         }
 
     // Pack output
+    #pragma hls_unroll
     CastLoop:
         for (unsigned i_ic = 0; i_ic < CONFIG_T::n_filt; i_ic++) {
             //#pragma HLS UNROLL
@@ -247,6 +269,7 @@ void compute_depthwise_output_buffer_1d(const data_T &in_elem, ac_channel<res_T>
     }
 }
 
+#pragma hls_design inline
 template <class data_T, class res_T, typename CONFIG_T>
 void compute_depthwise_output_buffer_2d(const data_T &in_elem,
                                         ap_shift_reg<typename data_T::value_type, CONFIG_T::in_width>
@@ -291,6 +314,7 @@ void compute_depthwise_output_buffer_2d(const data_T &in_elem,
         }
 
     // Pack output
+    #pragma hls_unroll
     CastLoop:
         for (unsigned i_ic = 0; i_ic < CONFIG_T::n_filt; i_ic++) {
             //#pragma HLS UNROLL

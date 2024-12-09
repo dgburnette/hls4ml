@@ -32,14 +32,16 @@ void dense_resource_rf_leq_nin(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::
     //#pragma HLS ARRAY_PARTITION variable=biases complete
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-    //#pragma HLS ARRAY_PARTITION variable=acc complete
+//#pragma HLS ARRAY_PARTITION variable=acc complete
 
+#pragma hls_unroll
 InitAccum:
     for (int iacc = 0; iacc < nout; iacc++) {
         //#pragma HLS UNROLL
         acc[iacc] = (typename CONFIG_T::accum_t)biases[iacc];
     }
 
+#pragma hls_pipeline_init_interval 1
 ReuseLoop:
     for (int ir = 0; ir < rufactor; ir++) {
         //#pragma HLS PIPELINE II=1 rewind
@@ -49,6 +51,7 @@ ReuseLoop:
         int out_index = 0;
         int acc_step = 0;
 
+    #pragma hls_unroll
     MultLoop:
         for (int im = 0; im < block_factor; im++) {
             //#pragma HLS UNROLL
@@ -74,6 +77,7 @@ ReuseLoop:
     }
 
 // Cast to "res_t" type
+#pragma hls_unroll
 Result:
     for (unsigned int ires = 0; ires < CONFIG_T::n_out; ires++) {
         //#pragma HLS UNROLL
@@ -102,8 +106,9 @@ void dense_resource_rf_gt_nin_rem0(data_T data[CONFIG_T::n_in], res_T res[CONFIG
     //#pragma HLS ARRAY_PARTITION variable=biases complete
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-    //#pragma HLS ARRAY_PARTITION variable=acc complete
+//#pragma HLS ARRAY_PARTITION variable=acc complete
 
+#pragma hls_unroll
 InitAccum:
     for (int iacc = 0; iacc < nout; iacc++) {
         //#pragma HLS UNROLL
@@ -126,6 +131,7 @@ IndexLoop:
         }
     }
 
+#pragma hls_pipeline_init_interval 1
 ReuseLoop:
     for (unsigned int ir = 0; ir < rufactor; ir++) {
         //#pragma HLS PIPELINE II=1 rewind
@@ -133,6 +139,7 @@ ReuseLoop:
         w_index = ir;
         out_index = outidx[ir] /*outstep*/;
 
+    #pragma hls_unroll
     MultLoop:
         for (unsigned int im = 0; im < block_factor; im++) {
             //#pragma HLS UNROLL
@@ -154,6 +161,7 @@ ReuseLoop:
     }
 
 // Cast to "res_t" type
+#pragma hls_unroll
 Result:
     for (unsigned int ires = 0; ires < CONFIG_T::n_out; ires++) {
         //#pragma HLS UNROLL
@@ -182,21 +190,24 @@ void dense_resource_rf_gt_nin(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n
     //#pragma HLS ARRAY_PARTITION variable=biases complete
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-    //#pragma HLS ARRAY_PARTITION variable=acc complete
+//#pragma HLS ARRAY_PARTITION variable=acc complete
 
+#pragma hls_unroll
 InitAccum:
     for (int iacc = 0; iacc < nout; iacc++) {
         //#pragma HLS UNROLL
         acc[iacc] = (typename CONFIG_T::accum_t)biases[iacc];
     }
 
+#pragma hls_pipeline_init_interval 1
 ReuseLoop:
     for (int ir = 0; ir < rufactor; ir++) {
         //#pragma HLS PIPELINE II=1 rewind
         // coverity[STACK_USE]
         typename CONFIG_T::accum_t tmpmult[block_factor];
-        //#pragma HLS ARRAY_PARTITION variable=tmpmult complete
+    //#pragma HLS ARRAY_PARTITION variable=tmpmult complete
 
+    #pragma hls_unroll
     MultLoop:
         for (int im = 0; im < block_factor; im++) {
             //#pragma HLS UNROLL
@@ -210,14 +221,16 @@ ReuseLoop:
                 CONFIG_T::template product<data_T, typename CONFIG_T::weight_t>::product(data[in_index], weights[w_index]);
         }
         typename CONFIG_T::accum_t mult[multiplier_limit];
-        //#pragma HLS ARRAY_PARTITION variable=mult complete
+    //#pragma HLS ARRAY_PARTITION variable=mult complete
 
+    #pragma hls_unroll
     ResetMult:
         for (int imult = 0; imult < multiplier_limit; imult++) {
             //#pragma HLS UNROLL
             mult[imult] = 0;
         }
 
+    #pragma hls_unroll
     AccumLoop1:
         for (int im = 0; im < block_factor; im++) {
             //#pragma HLS UNROLL
@@ -230,6 +243,7 @@ ReuseLoop:
             mult[out_index] += tmpmult[im];
         }
 
+    #pragma hls_unroll
     AccumLoop2:
         for (int im = 0; im < multiplier_limit; im++) {
             //#pragma HLS UNROLL
@@ -241,6 +255,7 @@ ReuseLoop:
     }
 
 // Cast to "res_t" type
+#pragma hls_unroll
 Result:
     for (unsigned int ires = 0; ires < CONFIG_T::n_out; ires++) {
         //#pragma HLS UNROLL
