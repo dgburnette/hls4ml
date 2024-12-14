@@ -24,6 +24,7 @@ from hls4ml.model.layers import (
     GarNetStack,
     GlobalPooling1D,
     GlobalPooling2D,
+    Lambda,
     MatMul,
     Merge,
     Pooling1D,
@@ -71,6 +72,7 @@ class FPGABackend(Backend):
             Dot,
             Conv,
             MatMul,
+            Lambda,
         ]
 
         for layer in accum_layers:
@@ -692,9 +694,12 @@ class FPGABackend(Backend):
 
         windows_int = []
 
-        for i in range(min_H):
-            for j in range(min_W):
-                windows_int.append(int(''.join(str(p) for p in reversed(windows_bin[i * min_W + j])), 2))
+        # CAT-38802 - 
+        # Initialize windows_int with zeros
+        windows_int = [0 for _ in range(min_H * min_W)]
+        # for i in range(min_H):
+        #     for j in range(min_W):
+        #         windows_int.append(int(''.join(str(p) for p in reversed(windows_bin[i * min_W + j])), 2))
 
         return (min_H, min_W, windows_int)
 

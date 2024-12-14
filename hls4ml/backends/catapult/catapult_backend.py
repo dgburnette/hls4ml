@@ -123,6 +123,7 @@ class CatapultBackend(FPGABackend):
             'catapult:fix_softmax_table_size',
             'catapult:process_fixed_point_quantizer_layer',
             'infer_precision_types',
+            'catapult:optimize_lambda',
         ]
         optimization_flow = register_flow('optimize', optimization_passes, requires=[init_flow], backend=self.name)
 
@@ -191,7 +192,7 @@ class CatapultBackend(FPGABackend):
         self,
         tech='fpga',
         part='xcku115-flvb2104-2-i',
-        asiclibs='nangate-45nm',
+        asiclibs='nangate-45nm_beh',
         asicfifo='hls4ml_lib.mgc_pipe_mem',
         fifo=None,
         clock_period=5,
@@ -219,7 +220,7 @@ class CatapultBackend(FPGABackend):
         Args:
             tech (str, optional): The target technology type. One of 'asic' or 'fpga'.
             part (str, optional): The FPGA part to be used. Defaults to 'xcvu13p-flga2577-2-e'.
-            asiclibs (str, optional): The list of ASIC Catapult libraries to load. Defaults to 'nangate-45nm'.
+            asiclibs (str, optional): The list of ASIC Catapult libraries to load. Defaults to 'nangate-45nm_beh'.
             asicfifo (str, optional): The name of the ASIC FIFO library module to use. Defaults to 'hls4ml_lib.mgc_pipe_mem'.
             fifo (str, optional): The name of the FPGA FIFO library module to use. Default to None.
             clock_period (int, optional): The clock period. Defaults to 5.
@@ -257,7 +258,7 @@ class CatapultBackend(FPGABackend):
         if tech == 'fpga':
             config['Part'] = part if part is not None else 'xcvu13p-flga2577-2-e'
         else:
-            config['ASICLibs'] = asiclibs if asiclibs is not None else 'nangate-45nm'
+            config['ASICLibs'] = asiclibs if asiclibs is not None else 'nangate-45nm_beh'
         config['FIFO'] = fifo
         config['ASICFIFO'] = asicfifo
         config['ClockPeriod'] = clock_period
@@ -271,6 +272,8 @@ class CatapultBackend(FPGABackend):
             'WriteTar': write_tar,
         }
         config['ROMLocation'] = 'Local'
+        config['MemType'] = None
+        config['PortType'] = None
         config['CopyNNET'] = False
         # New experimental option
         config['CModelDefaultThreshold'] = 0.0
@@ -410,7 +413,7 @@ class CatapultBackend(FPGABackend):
         os.system(ccs_invoke)
         os.chdir(curr_dir)
 
-        return parse_catapult_report(model.config.get_output_dir())
+        return parse_catapult_report(model.config.get_output_dir(), model.config.get_project_name(), model.config.get_project_dir() )
 
     def _validate_conv_strategy(self, layer):
         if layer.model.config.pipeline_style.lower() != 'dataflow':

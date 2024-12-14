@@ -14,6 +14,7 @@ const char *get_weights_dir() { return s_weights_dir.c_str(); }
 
 #include "firmware/myproject.h"
 #include "nnet_utils/nnet_helpers.h"
+// hls-fpga-machine-learning insert catapult_scverify
 // #include "firmware/parameters.h"
 
 #include <mc_scverify.h>
@@ -43,9 +44,8 @@ CCS_MAIN(int argc, char *argv[]) {
                   << std::endl;
         std::cerr << "       <tb_input_features>     - string pathname to tb_input_features.dat (optional)" << std::endl;
         std::cerr << "       <tb_output_predictions> - string pathname to tb_output_predictions.dat (optional)" << std::endl;
-        std::cerr << "       <threshold>             - Python vs C++ prediction comparison threshold. Set to 0.0 to "
-                     "disable. (optional)"
-                  << std::endl;
+        std::cerr << "       <threshold>             - Python vs C++ prediction comparison threshold." << std::endl;
+        std::cerr << "                                 Set to 0.0 to disable. (optional)" << std::endl;
         std::cerr << std::endl;
         std::cerr << "If no testbench input/prediction data provided, random input data will be generated" << std::endl;
         CCS_RETURN(-1);
@@ -98,8 +98,8 @@ CCS_MAIN(int argc, char *argv[]) {
     std::string pline;
     int e = 0;
     unsigned int total_err_cnt = 0;
-    (void)total_err_cnt;
-    (void)threshold; // to prevent unused-variable warnings when tb feature is not enabled
+    (void)total_err_cnt; // to prevent unused-variable warnings when tb feature is not enabled
+    (void)threshold;     // to prevent unused-variable warnings when tb feature is not enabled
 
     if (!use_random) {
         while (std::getline(fin, iline) && std::getline(fpr, pline)) {

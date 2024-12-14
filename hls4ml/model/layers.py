@@ -1626,6 +1626,26 @@ class SymbolicExpression(Layer):
         self.add_output_variable([len(self.get_attr('expression'))], [f'N_OUTPUTS_{self.index}'], var_name='y')
 
 
+class Lambda(Layer):
+    _expected_attributes = [
+        Attribute('in_height'),
+        Attribute('in_width'),
+        Attribute('n_chan'),
+        Attribute('out_height'),
+        Attribute('out_width'),
+        Attribute('n_filt'),
+        Attribute('depth_to_space'),
+        Attribute('normalize'),
+        Attribute('denormalize'),
+    ]
+
+    def initialize(self):
+        inp = self.get_input_variable(self.inputs[0])
+        shape = inp.shape
+        dims = [f'OUT_HEIGHT_{self.index}', f'OUT_WIDTH_{self.index}', f'N_FILT_{self.index}']
+        self.add_output_variable(shape, dims)
+
+
 layer_map = {
     'Input': Input,
     'InputLayer': Input,
@@ -1694,6 +1714,7 @@ layer_map = {
     'SymbolicExpression': SymbolicExpression,
     # TensorFlow-specific layers:
     'BiasAdd': BiasAdd,
+    'Lambda': Lambda,
 }
 
 

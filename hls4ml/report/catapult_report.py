@@ -128,20 +128,19 @@ def _get_abs_and_percentage_values(unparsed_cell):
     return int(unparsed_cell.split('(')[0]), float(unparsed_cell.split('(')[1].replace('%', '').replace(')', ''))
 
 
-def parse_catapult_report(output_dir):
+def parse_catapult_report(output_dir, ProjectName, project_dir=None):
     if not os.path.exists(output_dir):
         print(f'Project OutputDir {output_dir} does not exist. Exiting.')
         return
 
     # Read the YAML config file to determine the project settings
-    with open(output_dir + '/hls4ml_config.yml') as yfile:
-        ydata = yaml.safe_load(yfile)
+    #with open(output_dir + '/hls4ml_config.yml') as yfile:
+    #    ydata = yaml.safe_load(yfile)
 
-    if not ydata['ProjectDir'] is None:
-        ProjectDir = ydata['ProjectDir']
+    if project_dir is None:
+        ProjectDir = ProjectName + '_prj'
     else:
-        ProjectDir = ydata['ProjectName'] + '_prj'
-    ProjectName = ydata['ProjectName']
+        ProjectDir = project_dir
 
     sln_dir = output_dir + '/' + ProjectDir
     if not os.path.exists(sln_dir):

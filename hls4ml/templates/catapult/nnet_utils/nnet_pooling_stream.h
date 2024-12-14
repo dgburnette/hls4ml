@@ -391,7 +391,7 @@ void compute_pool_buffer_1d(const data_T &in_elem, ac_channel<res_T> &res) {
     static int pX = 0;
     static int sX = 0;
 
-    typename data_T::value_type pool_window[CONFIG_T::pool_width];
+    typename CONFIG_T::accum_t pool_window[CONFIG_T::pool_width];
     //#pragma HLS ARRAY_PARTITION variable=pool_window complete
 
     static typename data_T::value_type kernel_data[CONFIG_T::pool_width * CONFIG_T::n_filt];

@@ -1,3 +1,5 @@
+# from copy import copy
+
 from hls4ml.backends.catapult.passes.convolution_templates import (
     Conv1DConfigTemplate,
     Conv1DFunctionTemplate,

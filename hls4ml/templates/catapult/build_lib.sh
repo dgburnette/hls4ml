@@ -24,3 +24,12 @@ ${CC} ${CFLAGS} ${INCFLAGS} -D WEIGHTS_DIR="${WEIGHTS_DIR}" -c firmware/${PROJEC
 ${CC} ${CFLAGS} ${INCFLAGS} -D WEIGHTS_DIR="${WEIGHTS_DIR}" -c ${PROJECT}_bridge.cpp -o ${PROJECT}_bridge.o
 ${CC} ${CFLAGS} ${INCFLAGS} -shared ${PROJECT}.o ${PROJECT}_bridge.o -o firmware/${PROJECT}-${LIB_STAMP}.so
 rm -f *.o
+
+if [ -d "$MGC_HOME/shared/include/nnet_utils" ]; then
+  echo "build_lib.sh: Creating standalone C++ testbench executable"
+  rm -f ${PROJECT}.exe
+  ${CC} -std=c++11 -g ${INCFLAGS} firmware/${PROJECT}.cpp ${PROJECT}_test.cpp -o ${PROJECT}.exe
+  echo ""
+  echo "To run the C++ testbench standalone:"
+  echo "  ${PROJECT}.exe ./firmware/weights ./tb_data/tb_input_features.dat ./tb_data/tb_output_predictions.dat"
+fi
