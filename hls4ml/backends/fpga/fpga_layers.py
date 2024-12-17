@@ -73,16 +73,17 @@ class BatchNormalizationQuantizedTanh(Layer):
 class PointwiseConv1D(Conv1D):
     '''Optimized Conv1D implementation for 1x1 kernels.'''
 
-    # Nothing to do, will pick up function and config from class name
-    pass
+    def initialize(self):
+        # Do noting, values copied
+        pass
 
 
 class PointwiseConv2D(Conv2D):
     '''Optimized Conv2D implementation for 1x1 kernels.'''
 
-    # Nothing to do, will pick up function and config from class name
-    pass
-
+    def initialize(self):
+        # Do noting, values copied
+        pass
 
 class DepthToSpace(Lambda):
     '''tensorflow.nn.depth_to_space implementation'''
@@ -114,12 +115,14 @@ class DepthToSpace(Lambda):
 class Normalize(Lambda):
     '''Normalization implementation of the pixel values (x - rgb_mean) / 127.5'''
 
-    # Nothing to do, will pick up function and config from class name
-    pass
+    def initialize(self):
+        # Nothing to do, will pick up function and config from class name
+        pass
 
 
 class Denormalize(Lambda):
     '''Denormalization implementation of the pixel values (x * 127.5 + rgb_mean)'''
 
-    # Nothing to do, will pick up function and config from class name
-    pass
+    def initialize(self):
+        # Nothing to do, will pick up function and config from class name
+        pass
