@@ -1,11 +1,12 @@
 """ The clone templates in the fpga backend do not work for Catapult because ......
 """
 
-from hls4ml.backends.template import FunctionCallTemplate
-from hls4ml.backends.fpga.passes.clone import Clone, CloneFunctionTemplate
-
+# from hls4ml.backends.fpga.passes.clone import Clone, CloneFunctionTemplate
+# from hls4ml.backends.template import FunctionCallTemplate
+from hls4ml.backends.fpga.passes.clone import CloneFunctionTemplate
 
 clone_include_list = ['nnet_utils/nnet_stream.h']
+
 
 class CloneCatapultFunctionTemplate(CloneFunctionTemplate):
     def __init__(self):

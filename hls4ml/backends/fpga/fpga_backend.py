@@ -694,7 +694,7 @@ class FPGABackend(Backend):
 
         windows_int = []
 
-        # CAT-38802 - 
+        # CAT-38802 -
         # Initialize windows_int with zeros
         windows_int = [0 for _ in range(min_H * min_W)]
         # for i in range(min_H):

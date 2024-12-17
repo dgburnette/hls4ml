@@ -413,7 +413,9 @@ class CatapultBackend(FPGABackend):
         os.system(ccs_invoke)
         os.chdir(curr_dir)
 
-        return parse_catapult_report(model.config.get_output_dir(), model.config.get_project_name(), model.config.get_project_dir() )
+        return parse_catapult_report(
+            model.config.get_output_dir(), model.config.get_project_name(), model.config.get_project_dir()
+        )
 
     def _validate_conv_strategy(self, layer):
         if layer.model.config.pipeline_style.lower() != 'dataflow':

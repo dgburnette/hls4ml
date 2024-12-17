@@ -1,8 +1,6 @@
 import os
 import re
 
-import yaml
-
 
 def read_catapult_report(hls_dir, full_report=False):
     if not os.path.exists(hls_dir):
@@ -132,10 +130,6 @@ def parse_catapult_report(output_dir, ProjectName, project_dir=None):
     if not os.path.exists(output_dir):
         print(f'Project OutputDir {output_dir} does not exist. Exiting.')
         return
-
-    # Read the YAML config file to determine the project settings
-    #with open(output_dir + '/hls4ml_config.yml') as yfile:
-    #    ydata = yaml.safe_load(yfile)
 
     if project_dir is None:
         ProjectDir = ProjectName + '_prj'
