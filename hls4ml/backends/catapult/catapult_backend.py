@@ -123,7 +123,6 @@ class CatapultBackend(FPGABackend):
             'catapult:fix_softmax_table_size',
             'catapult:process_fixed_point_quantizer_layer',
             'infer_precision_types',
-            'catapult:optimize_lambda',
         ]
         optimization_flow = register_flow('optimize', optimization_passes, requires=[init_flow], backend=self.name)
 
@@ -194,7 +193,9 @@ class CatapultBackend(FPGABackend):
         part='xcku115-flvb2104-2-i',
         asiclibs='nangate-45nm_beh',
         asicfifo='hls4ml_lib.mgc_pipe_mem',
+        asicram='ccs_sample_mem.ccs_ram_sync_1R1W',
         fifo=None,
+        ram='Xilinx_RAMS.BLOCK_1R1W_RBW',
         clock_period=5,
         io_type='io_parallel',
         namespace=None,
@@ -213,6 +214,7 @@ class CatapultBackend(FPGABackend):
         BuildBUP=0,
         BUPWorkers=0,
         LaunchDA=0,
+        startup='',
         **_,
     ):
         """Create initial configuration of the Vivado backend.
@@ -222,7 +224,9 @@ class CatapultBackend(FPGABackend):
             part (str, optional): The FPGA part to be used. Defaults to 'xcvu13p-flga2577-2-e'.
             asiclibs (str, optional): The list of ASIC Catapult libraries to load. Defaults to 'nangate-45nm_beh'.
             asicfifo (str, optional): The name of the ASIC FIFO library module to use. Defaults to 'hls4ml_lib.mgc_pipe_mem'.
+            asicram (str, optional): The name of the ASIC RAM library module to use.  Defaults to 'ccs_sample_mem.ccs_ram_sync_1R1W'.
             fifo (str, optional): The name of the FPGA FIFO library module to use. Default to None.
+            ram (str, optional): The name of the FPGA RAM library module to use.  Defaults to 'Xilinx_RAMS.BLOCK_1R1W_RBW'.
             clock_period (int, optional): The clock period. Defaults to 5.
             io_type (str, optional): Type of implementation used. One of
                 'io_parallel' or 'io_stream'. Defaults to 'io_parallel'.
@@ -248,6 +252,7 @@ class CatapultBackend(FPGABackend):
             BuildBUP (bool, optional): Enables a bottom-up HLS flow. Defaults to False.
             BUPWorkers (int, optional): When non-zero, specifies the number of parallel Catapult jobs to run. Defaults to 0.
             LaunchDA (bool, optional): Enables launching Catapult Design Analyzer during/after HLS. Defaults to False.
+            startup (str, optional): Optional string pathname to Catapult AI NN startup TCL file.
 
         Returns:
             dict: initial configuration.
@@ -261,8 +266,10 @@ class CatapultBackend(FPGABackend):
             config['ASICLibs'] = asiclibs if asiclibs is not None else 'nangate-45nm_beh'
         config['FIFO'] = fifo
         config['ASICFIFO'] = asicfifo
+        config['ASICRAM'] = asicram
         config['ClockPeriod'] = clock_period
         config['FIFO'] = fifo
+        config['RAM'] = ram
         config['IOType'] = io_type
         config['ProjectDir'] = project_dir
         config['HLSConfig'] = {}
@@ -290,6 +297,7 @@ class CatapultBackend(FPGABackend):
             'BuildBUP': BuildBUP,
             'BUPWorkers': BUPWorkers,
             'LaunchDA': LaunchDA,
+            'startup':        startup,
         }
 
         return config
