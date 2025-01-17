@@ -59,7 +59,7 @@ register_flow(
     'convert',
     [
         'channels_last_converter',
-        'separable_to_depthwise_and_conv',
+        'seperable_to_depthwise_and_conv',
         'remove_transpose_before_flatten',
         'remove_nop_transpose',
         'remove_single_channel_transpose',
