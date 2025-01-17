@@ -1,7 +1,9 @@
 import glob
 import os
+import re
 import stat
 import tarfile
+import pandas as pd
 from collections import OrderedDict
 from pathlib import Path
 from shutil import copyfile, copytree, rmtree
@@ -133,9 +135,9 @@ class CatapultWriter(Writer):
             if fifo is not None:
                 retstr = f'#pragma hls_resource {variable.name}:cns variables="{variable.name}"'
                 if no_reconvergence:
-                    retstr += f' map_to_module="{fifo}" fifo_depth="{fifo_depth}"'
+                    retstr += f' map_to_module="{fifo}" fifo_depth="1"'
                 else:
-                    retstr += f' map_to_module="{fifo}" // fifo_depth="{depth}"'
+                    retstr += f' map_to_module="{fifo}" fifo_depth="{depth}"'
                 return retstr
             else:
                 return ''
@@ -195,6 +197,7 @@ class CatapultWriter(Writer):
             model (ModelGraph): the hls4ml model.
         """
 
+        ROMLocation = model.config.get_config_value('ROMLocation')
         filedir = os.path.dirname(os.path.abspath(__file__))
 
         f = open(os.path.join(filedir, '../templates/catapult/firmware/myproject.cpp'))
@@ -236,6 +239,13 @@ class CatapultWriter(Writer):
                 namespace = model.config.get_writer_config().get('Namespace', None)
                 if namespace is not None:
                     newline += '}\n'
+
+            elif (ROMLocation=='Local') and ('// hls-fpga-machine-learning insert weights' in line):
+                newline = line
+                for layer in model.get_layers():
+                    for w in layer.get_weights():
+                        if w.storage.lower() != 'bram':
+                            newline += f'#include "weights/{w.name}.h"\n'
 
             elif '// hls-fpga-machine-learning insert load weights' in line:
                 newline = line
@@ -469,6 +479,7 @@ class CatapultWriter(Writer):
         Args:
             model (ModelGraph): the hls4ml model.
         """
+        ROMLocation = model.config.get_config_value('ROMLocation')
         filedir = os.path.dirname(os.path.abspath(__file__))
         f = open(os.path.join(filedir, '../templates/catapult/firmware/parameters.h'))
         fout = open(f'{model.config.get_output_dir()}/firmware/parameters.h', 'w')
@@ -479,7 +490,7 @@ class CatapultWriter(Writer):
                 for include in sorted(set(sum((layer.get_attr('include_header', []) for layer in model.get_layers()), []))):
                     newline += '#include "%s"\n' % include
 
-            elif '// hls-fpga-machine-learning insert weights' in line:
+            elif (ROMLocation!='Local') and ('// hls-fpga-machine-learning insert weights' in line):
                 newline = line
                 for layer in model.get_layers():
                     for w in layer.get_weights():
@@ -836,7 +847,10 @@ class CatapultWriter(Writer):
                     line = line + '  reset           0\n'
                     if bopts is not None:
                         for bopt in bopts:
-                            line = line + '  ' + bopt + ' ' + str(bopts[bopt]) + '\n'
+                            if bopts[bopt] == '':
+                                line = line + '  ' + bopt + ' {}\n'
+                            else:
+                                line = line + '  ' + bopt + ' ' + str(bopts[bopt]) + '\n'
                     else:
                         print('Warning - Catapult backend config was not created with create_initial_config')
                         line = line + '  csim            1\n'
@@ -851,6 +865,7 @@ class CatapultWriter(Writer):
                         line = line + '  BuildBUP        0\n'
                         line = line + '  BUPWorkers      0\n'
                         line = line + '  LaunchDA        0\n'
+                        line = line + '  startup         {}\n'
                     line = line + '}\n'
 
                 if '#hls-fpga-machine-learning insert techlibs' in line:

@@ -133,6 +133,13 @@ options set /Flows/Vivado/PCL_CACHE $::env(XILINX_PCL_CACHE)
 solution options set /Flows/Vivado/PCL_CACHE $::env(XILINX_PCL_CACHE)
 }
 
+#--------------------------------------------------------
+# Source optional end-user startup script
+if { [info exists BuildOptions(startup)] && ($BuildOptions(startup) != "") && [file exists $BuildOptions(startup)] } {
+  logfile message "Sourcing Catapult AI NN startup script '$BuildOptions(startup)'\n" info
+  catch {dofile $BuildOptions(startup)}
+}
+
 # Turn on HLS4ML flow (wrapped in a cache so that older Catapult installs still work)
 catch {flow package require /HLS4ML}
 
