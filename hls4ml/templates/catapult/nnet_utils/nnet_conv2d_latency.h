@@ -57,19 +57,13 @@ void conv_2d_latency_cf(
                                     CONFIG_T::filt_height * CONFIG_T::filt_width];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=mult complete dim=0
-    //#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=weights,biases
 
     // Parallel mode
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=biases complete dim=0
 
     // Limit multipliers to control parallelization
     const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
-//#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
 // Convolve, saving all multiplication results to accumulate later
 ConvOutHeight:
@@ -180,19 +174,13 @@ void conv_2d_latency_cl(
                                     CONFIG_T::filt_height * CONFIG_T::filt_width];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=mult complete dim=0
-    //#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=weights,biases
 
     // Parallel mode
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=biases complete dim=0
 
     // Limit multipliers to control parallelization
     const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
-//#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
 // Convolve, saving all multiplication results to accumulate later
 ConvOutHeight:
@@ -300,19 +288,13 @@ void pointwise_conv_2d_latency_cl(data_T data[CONFIG_T::in_height * CONFIG_T::in
     typename CONFIG_T::accum_t mult[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=mult complete dim=0
-    //#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=weights,biases
 
     // Parallel mode
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=biases complete dim=0
 
     // Limit multipliers to control parallelization
     const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
-//#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
 // Convolve, saving all multiplication results to accumulate later
 ConvOutHeight:

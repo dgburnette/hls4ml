@@ -19,31 +19,23 @@ void depthwise_conv_1d_latency_cl(data_T data[CONFIG_T::in_width * CONFIG_T::n_c
     constexpr int ce_reuse_factor = CONFIG_T::reuse_factor;
 
     data_T data_buf[CONFIG_T::n_pixels][mult_n_in];
-    // #pragma HLS ARRAY_PARTITION variable=data_buf complete dim=0
 
     typename CONFIG_T::accum_t mult[mult_n_in];
-    // #pragma HLS ARRAY_PARTITION variable=mult complete
 
     typename CONFIG_T::accum_t acc[mult_n_out];
-    // #pragma HLS ARRAY_PARTITION variable=acc complete
 
-    // #pragma HLS ARRAY_PARTITION variable=weights complete
-    // #pragma HLS ARRAY_PARTITION variable=biases complete
 
     // Limit multipliers to control parallelization
-    // #pragma HLS ALLOCATION operation instances=mul limit=CONFIG_T::mult_config::multiplier_limit
 
 #pragma hls_pipeline_init_interval ce_reuse_factor
 PartitionLoop:
     for (int i_part = 0; i_part < CONFIG_T::n_partitions; i_part++) {
-        // #pragma HLS PIPELINE II=CONFIG_T::reuse_factor rewind
 
         CONFIG_T::template fill_buffer<data_T, CONFIG_T>::fill_buffer(data, data_buf, i_part);
 
     #pragma hls_unroll
     PixelLoop:
         for (unsigned i_pxl = 0; i_pxl < CONFIG_T::n_pixels; i_pxl++) {
-            // #pragma HLS UNROLL
 
             data_T cache;
 
@@ -51,7 +43,6 @@ PartitionLoop:
         #pragma hls_unroll
         Product:
             for (int i_in = 0; i_in < mult_n_in; i_in++) {
-                // #pragma HLS UNROLL
                 cache = data_buf[i_pxl][i_in];
                 mult[i_in] =
                     CONFIG_T::mult_config::template product<data_T, typename CONFIG_T::mult_config::weight_t>::product(
@@ -62,7 +53,6 @@ PartitionLoop:
         #pragma hls_unroll
         ResetAccum:
             for (int i_acc = 0; i_acc < mult_n_out; i_acc++) {
-                // #pragma HLS UNROLL
                 acc[i_acc] = (typename CONFIG_T::accum_t)biases[i_acc];
             }
 
@@ -70,11 +60,9 @@ PartitionLoop:
         #pragma hls_unroll
         Accum1:
             for (int i_in = 0; i_in < mult_n_acc; i_in++) {
-                // #pragma HLS UNROLL
             #pragma hls_unroll
             Accum2:
                 for (int i_out = 0; i_out < mult_n_out; i_out++) {
-                    // #pragma HLS UNROLL
                     acc[i_out] += mult[i_in * mult_n_out + i_out];
                 }
             }
@@ -83,7 +71,6 @@ PartitionLoop:
         #pragma hls_unroll
         Result:
             for (int i_res = 0; i_res < mult_n_out; i_res++) {
-                // #pragma HLS UNROLL
                 *(res++) = cast<data_T, res_T, typename CONFIG_T::mult_config>(acc[i_res]);
             }
         }

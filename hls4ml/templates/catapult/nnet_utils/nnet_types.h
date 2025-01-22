@@ -26,7 +26,6 @@ template <typename T, unsigned N> struct array {
 
         #pragma hls_unroll
         for (unsigned i = 0; i < N; i++) {
-            //#pragma HLS UNROLL
             data[i] = other[i];
         }
         return *this;

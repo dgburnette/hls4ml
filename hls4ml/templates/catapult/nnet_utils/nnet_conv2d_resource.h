@@ -58,9 +58,6 @@ void conv_2d_full(
     data_T data_col[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-    ////#pragma HLS ARRAY_PARTITION variable=data_conv complete
-    //#pragma HLS ARRAY_PARTITION variable=data_col complete
-    //#pragma HLS ARRAY_PARTITION variable=res_col complete
 
     im2col_2d<data_T, CONFIG_T>(data, data_conv);
 
@@ -118,23 +115,16 @@ void conv_2d_resource_cf(
     const int rufactor = CONFIG_T::reuse_factor;
     const int block_factor = DIV_ROUNDUP(nin * nout, rufactor);
 
-    ////#pragma HLS function_instantiate variable=weights,biases
-    ////#pragma HLS RESOURCE         variable=weights core=RAM_2P_BRAM Commenting out the deisgnation HLS seems to choose
     /// correctly
-    ////#pragma HLS ARRAY_RESHAPE   variable=weights block factor=block_factor
-    ////#pragma HLS ARRAY_PARTITION variable=biases complete
 
     data_T data_col[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=data_col complete
-    //#pragma HLS ARRAY_PARTITION variable=res_col complete
 
 HeightLoop:
     for (int i = 0; i < CONFIG_T::out_height; i++) {
     WidthLoop:
         for (int j = 0; j < CONFIG_T::out_width; j++) {
-            //#pragma HLS PIPELINE
             im2col_2d_cf<data_T, CONFIG_T>(data, data_col, i, j);
             dense<data_T, res_T, typename CONFIG_T::mult_config>(data_col, res_col, weights, biases);
         FiltLoop:
@@ -208,23 +198,16 @@ void conv_2d_resource_cl(
     const int rufactor = CONFIG_T::reuse_factor;
     const int block_factor = DIV_ROUNDUP(nin * nout, rufactor);
 
-    ////#pragma HLS function_instantiate variable=weights,biases
-    ////#pragma HLS RESOURCE         variable=weights core=RAM_2P_BRAM Commenting out the deisgnation HLS seems to choose
     /// correctly
-    ////#pragma HLS ARRAY_RESHAPE   variable=weights block factor=block_factor
-    ////#pragma HLS ARRAY_PARTITION variable=biases complete
 
     data_T data_col[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=data_col complete
-    //#pragma HLS ARRAY_PARTITION variable=res_col complete
 
 HeightLoop:
     for (int i = 0; i < CONFIG_T::out_height; i++) {
     WidthLoop:
         for (int j = 0; j < CONFIG_T::out_width; j++) {
-            //#pragma HLS PIPELINE
             im2col_2d_cl<data_T, CONFIG_T>(data, data_col, i, j);
             dense<data_T, res_T, typename CONFIG_T::mult_config>(data_col, res_col, weights, biases);
         FiltLoop:
@@ -247,23 +230,16 @@ void pointwise_conv_2d_resource_cl(data_T data[CONFIG_T::in_height * CONFIG_T::i
     const int rufactor = CONFIG_T::reuse_factor;
     const int block_factor = DIV_ROUNDUP(nin * nout, rufactor);
 
-    ////#pragma HLS function_instantiate variable=weights,biases
-    ////#pragma HLS RESOURCE         variable=weights core=RAM_2P_BRAM Commenting out the deisgnation HLS seems to choose
     /// correctly
-    ////#pragma HLS ARRAY_RESHAPE   variable=weights block factor=block_factor
-    ////#pragma HLS ARRAY_PARTITION variable=biases complete
 
     data_T data_col[CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=data_col complete
-    //#pragma HLS ARRAY_PARTITION variable=res_col complete
 
 HeightLoop:
     for (int i = 0; i < CONFIG_T::out_height; i++) {
     WidthLoop:
         for (int j = 0; j < CONFIG_T::out_width; j++) {
-            //#pragma HLS PIPELINE
             im2col_2d_pointwise_cl<data_T, CONFIG_T>(data, data_col, i, j);
             dense<data_T, res_T, typename CONFIG_T::mult_config>(data_col, res_col, weights, biases);
         FiltLoop:

@@ -34,19 +34,14 @@ void normalize(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in],
     data_T cache;
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=scale,bias
 
     // For parallel inputs:
     //   - completely partition arrays -- target fabric
     //   - if we have an unroll factor, limit number of multipliers
-    //#pragma HLS PIPELINE II=CONFIG_T::reuse_factor
     constexpr int ce_reuse_factor = CONFIG_T::reuse_factor;
     (void)ce_reuse_factor;
     #pragma hls_pipeline_init_interval ce_reuse_factor
 
-    // #pragma HLS ARRAY_PARTITION variable=weights complete // remove this line for now, it breaks compression sometimes
-    //#pragma HLS ARRAY_PARTITION variable=scale complete
-    //#pragma HLS ARRAY_PARTITION variable=bias complete
 
     int multiplier_limit = ceil(float(CONFIG_T::n_in) / float(CONFIG_T::reuse_factor));
     CONFIG_T::template product<data_T, typename CONFIG_T::scale_t>::limit(multiplier_limit);
@@ -84,8 +79,6 @@ struct batchnorm_quantized_tanh_config {
 template <class data_T, typename CONFIG_T>
 void normalize_binary_tanh(data_T data[CONFIG_T::n_in], ac_int<1, false> res[CONFIG_T::n_in],
                            data_T threshold[CONFIG_T::n_in]) {
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=res complete
 
     data_T datareg;
     ac_int<1, false> cache;
@@ -104,8 +97,6 @@ void normalize_binary_tanh(data_T data[CONFIG_T::n_in], ac_int<1, false> res[CON
 template <class data_T, typename CONFIG_T>
 void normalize_ternary_tanh(data_T data[CONFIG_T::n_in], ac_int<2, true> res[CONFIG_T::n_in],
                             data_T threshold_hi[CONFIG_T::n_in], data_T threshold_lo[CONFIG_T::n_in]) {
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=res complete
 
     data_T datareg;
     ac_int<2, true> cache;
