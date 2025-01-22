@@ -1,9 +1,7 @@
 import glob
 import os
-import re
 import stat
 import tarfile
-import pandas as pd
 from collections import OrderedDict
 from pathlib import Path
 from shutil import copyfile, copytree, rmtree
@@ -95,7 +93,6 @@ class CatapultWriter(Writer):
         # Walk model looking for any layer reconvergence (such cases would preclude setting FIFO_DEPTH=1)
         # (Not the most efficient algorithm (called for every variable and cut-n-pasted in _make_array_fifo_pragma below)
         no_reconvergence = True
-        fifo_depth = model.config.get_config_value("FIFO_DEPTH", default=1)
         for layer in model.get_layers():
             if layer.attributes.layer.class_name == 'Concatenate':
                 no_reconvergence = False
@@ -240,7 +237,7 @@ class CatapultWriter(Writer):
                 if namespace is not None:
                     newline += '}\n'
 
-            elif (ROMLocation=='Local') and ('// hls-fpga-machine-learning insert weights' in line):
+            elif (ROMLocation == 'Local') and ('// hls-fpga-machine-learning insert weights' in line):
                 newline = line
                 for layer in model.get_layers():
                     for w in layer.get_weights():
@@ -314,12 +311,14 @@ class CatapultWriter(Writer):
             elif '// hls-fpga-machine-learning insert layers' in line:
                 io_type = model.config.get_config_value("IOType")
                 newline = line + '\n'
+                declared_vars = set()  # Track already declared variables
                 for layer in model.get_layers():
                     vars = layer.get_variables()
                     for var in vars:
                         if var not in model_inputs and var not in model_outputs:
                             def_cpp = var.definition_cpp()
-                            if def_cpp is not None:
+                            if def_cpp is not None and def_cpp not in declared_vars:  # Check for duplicates
+                                declared_vars.add(def_cpp)  # Mark as declared
                                 if var.pragma:
                                     newline += '    ' + self._make_array_fifo_pragma(var, model) + '\n'
                                 if io_type == 'io_serial' or io_type == 'io_stream':
@@ -490,7 +489,7 @@ class CatapultWriter(Writer):
                 for include in sorted(set(sum((layer.get_attr('include_header', []) for layer in model.get_layers()), []))):
                     newline += '#include "%s"\n' % include
 
-            elif (ROMLocation!='Local') and ('// hls-fpga-machine-learning insert weights' in line):
+            elif (ROMLocation != 'Local') and ('// hls-fpga-machine-learning insert weights' in line):
                 newline = line
                 for layer in model.get_layers():
                     for w in layer.get_weights():

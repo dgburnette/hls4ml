@@ -60,6 +60,12 @@ void myproject_float(
 ) {
     // hls-fpga-machine-learning insert namespace
 
+    static bool loaded_weights = false;
+    if (!loaded_weights) {
+        // hls-fpga-machine-learning insert load weights
+        loaded_weights = true;
+    }
+
     // hls-fpga-machine-learning insert wrapper #float
 }
 
@@ -67,6 +73,12 @@ void myproject_double(
     // hls-fpga-machine-learning insert header #double
 ) {
     // hls-fpga-machine-learning insert namespace
+
+    static bool loaded_weights = false;
+    if (!loaded_weights) {
+        // hls-fpga-machine-learning insert load weights
+        loaded_weights = true;
+    }
 
     // hls-fpga-machine-learning insert wrapper #double
 }

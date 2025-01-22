@@ -559,7 +559,7 @@ template <unsigned K, int W1, int I1, bool S1, ac_q_mode Q1, ac_o_mode O1, int W
           ac_o_mode O2>
 void ac_softmax_pwl_wrapper(const ac_fixed<W1, I1, S1, Q1, O1> (&input)[K], ac_fixed<W2, I2, S2, Q2, O2> (&output)[K]) {
     ac_fixed<W2, I2, false, Q2, O2> tmp[K];
-    ac_math::ac_softmax_pwl_new<0,0,AC_TRN, K, W1,I1,S1,Q1,O1,W2,I2,Q2,O2>(input, tmp);
+    ac_math::ac_softmax_pwl_new<0, 0, AC_TRN, K, W1, I1, S1, Q1, O1, W2, I2, Q2, O2>(input, tmp);
     for (unsigned int x = 0; x < K; x++)
         output[x] = tmp[x];
 }

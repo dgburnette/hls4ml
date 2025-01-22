@@ -107,12 +107,20 @@ transpose_include_list = ['nnet_utils/nnet_transpose.h', 'nnet_utils/nnet_transp
 transpose_config_template = """struct {config_name} {{
     static const unsigned dims = {dims};
     static const unsigned N = {N};
+#if 0
     static const unsigned* const from_shape;
     static const unsigned* const to_shape;
     static const unsigned* const perm;
     static const unsigned* const perm_strides;
+#else
+    static const unsigned from_shape[{dims}];
+    static const unsigned to_shape[{dims}];
+    static const unsigned perm[{dims}];
+    static const unsigned perm_strides[{dims}];
+#endif
 }};
 
+#if 0
 unsigned {config_name}_from_shape[{dims}] = {{{from_shape}}};
 unsigned {config_name}_to_shape[{dims}] = {{{to_shape}}};
 unsigned {config_name}_perm[{dims}] = {{{perm}}};
@@ -122,6 +130,15 @@ const unsigned* const {config_name}::from_shape = {config_name}_from_shape;
 const unsigned* const {config_name}::to_shape = {config_name}_to_shape;
 const unsigned* const {config_name}::perm = {config_name}_perm;
 const unsigned* const {config_name}::perm_strides = {config_name}_perm_strides;
+#else
+#ifndef INCLUDED_MC_TESTBENCH_H
+const unsigned {config_name}::from_shape[] = {{{from_shape}}};
+const unsigned {config_name}::to_shape[] = {{{to_shape}}};
+const unsigned {config_name}::perm[] = {{{perm}}};
+const unsigned {config_name}::perm_strides[] = {{{perm_strides}}};
+#endif
+#endif
+
 """
 
 transpose_function_template = 'nnet::transpose<{input_t}, {output_t}, {config_name}>({input}, {output});'

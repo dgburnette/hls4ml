@@ -209,6 +209,7 @@ class CatapultBackend(FPGABackend):
         verilog=1,
         RTLSynth=0,
         RandomTBFrames=2,
+        ParamStore='global',
         PowerEst=0,
         PowerOpt=0,
         BuildBUP=0,
@@ -224,7 +225,8 @@ class CatapultBackend(FPGABackend):
             part (str, optional): The FPGA part to be used. Defaults to 'xcvu13p-flga2577-2-e'.
             asiclibs (str, optional): The list of ASIC Catapult libraries to load. Defaults to 'nangate-45nm_beh'.
             asicfifo (str, optional): The name of the ASIC FIFO library module to use. Defaults to 'hls4ml_lib.mgc_pipe_mem'.
-            asicram (str, optional): The name of the ASIC RAM library module to use.  Defaults to 'ccs_sample_mem.ccs_ram_sync_1R1W'.
+            asicram (str, optional): The name of the ASIC RAM library module to use.
+                Defaults to 'ccs_sample_mem.ccs_ram_sync_1R1W'.
             fifo (str, optional): The name of the FPGA FIFO library module to use. Default to None.
             ram (str, optional): The name of the FPGA RAM library module to use.  Defaults to 'Xilinx_RAMS.BLOCK_1R1W_RBW'.
             clock_period (int, optional): The clock period. Defaults to 5.
@@ -247,6 +249,8 @@ class CatapultBackend(FPGABackend):
             RTLSynth (bool, optional): Enables downstream RTL synthesis. Default to False.
             RandomTBFrame (int, optional): In the absense of python dataset files for SCVerify, generate N frames of
                 random feature data. Defaults to 2.
+            ParamStore (str, optional): Specify how parameters are store. Valid values 'inline' for internal C++ arrays,
+                'interface' for interface C++ arrays, 'merged' for single programmable interface array. Defaults to 'inline'.
             PowerEst (bool, optional): Enables post-HLS power estimation. Default to False.
             PowerOpt (bool, optional): Enables post-HLS power optimization. Default to False.
             BuildBUP (bool, optional): Enables a bottom-up HLS flow. Defaults to False.
@@ -278,9 +282,10 @@ class CatapultBackend(FPGABackend):
             'WriteWeightsTxt': write_weights_txt,
             'WriteTar': write_tar,
         }
+        config['PortType'] = None
         config['ROMLocation'] = 'Local'
         config['MemType'] = None
-        config['PortType'] = None
+
         config['CopyNNET'] = False
         # New experimental option
         config['CModelDefaultThreshold'] = 0.0
@@ -297,7 +302,7 @@ class CatapultBackend(FPGABackend):
             'BuildBUP': BuildBUP,
             'BUPWorkers': BUPWorkers,
             'LaunchDA': LaunchDA,
-            'startup':        startup,
+            'startup': startup,
         }
 
         return config

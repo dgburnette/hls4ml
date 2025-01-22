@@ -1,5 +1,5 @@
 #!/bin/bash
-
+set -e
 CC=g++
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
     CFLAGS="-O3 -fPIC -std=c++11 -fno-gnu-unique"

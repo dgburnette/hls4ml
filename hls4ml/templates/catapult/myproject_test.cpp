@@ -101,6 +101,8 @@ CCS_MAIN(int argc, char *argv[]) {
     (void)total_err_cnt; // to prevent unused-variable warnings when tb feature is not enabled
     (void)threshold;     // to prevent unused-variable warnings when tb feature is not enabled
 
+    // hls-fpga-machine-learning insert reload_channel
+
     if (!use_random) {
         while (std::getline(fin, iline) && std::getline(fpr, pline)) {
             if (e % CHECKPOINT == 0)
