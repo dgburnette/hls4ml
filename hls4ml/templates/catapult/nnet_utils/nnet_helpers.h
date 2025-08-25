@@ -15,7 +15,6 @@
 
 extern const char *get_weights_dir();
 
-
 namespace nnet {
 
 #ifndef __SYNTHESIS__
