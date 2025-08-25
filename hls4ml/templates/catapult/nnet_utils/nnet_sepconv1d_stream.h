@@ -19,7 +19,6 @@ void depthwise_conv_1d_encoded_cl(ac_channel<data_T> &data, ac_channel<res_T> &r
     //  for (unsigned i_out = 0; i_out < CONFIG_T::filt_width * CONFIG_T::n_chan; i_out++) {
     //  }
 
-
     res_T res_pack;
     unsigned outputs_ready = 0;
 
@@ -78,7 +77,6 @@ void pointwise_conv_1d_cl(ac_channel<data_T> &data, ac_channel<res_T> &res,
                           typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
     assert(CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
     assert(CONFIG_T::filt_width == 1);
-
 
     constexpr int ce_reuse_factor =
         CONFIG_T::reuse_factor * (CONFIG_T::strategy == nnet::latency && data_T::size / CONFIG_T::n_chan == 1);

@@ -39,7 +39,6 @@ template <class T, int W, int I> void init_sincos_table(T table[1 << (W - I - 3)
 
 template <class T> void sincos_lut(const T &input, T output[2]) {
 
-
     // This implementation is based on ac_sincos_lut.h from AC math library
 
     static bool flag = true;

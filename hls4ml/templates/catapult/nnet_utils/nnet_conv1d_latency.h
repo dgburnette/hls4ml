@@ -47,7 +47,6 @@ void conv_1d_latency_cl(data_T data[CONFIG_T::in_width * CONFIG_T::n_chan],
     typename CONFIG_T::accum_t mult[CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan * CONFIG_T::filt_width];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_width][CONFIG_T::n_filt];
 
-
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
 
     // Parallel mode
@@ -123,7 +122,6 @@ void pointwise_conv_1d_latency_cl(data_T data[CONFIG_T::in_width * CONFIG_T::n_c
 
     typename CONFIG_T::accum_t mult[CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_width][CONFIG_T::n_filt];
-
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
 

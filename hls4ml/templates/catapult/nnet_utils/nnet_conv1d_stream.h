@@ -32,7 +32,6 @@ void conv_1d_encoded_cl(ac_channel<data_T> &data, ac_channel<res_T> &res,
     //  for (unsigned i_out = 0; i_out < CONFIG_T::filt_width * CONFIG_T::n_chan; i_out++) {
     //  }
 
-
     res_T res_pack;
     unsigned outputs_ready = 0;
 

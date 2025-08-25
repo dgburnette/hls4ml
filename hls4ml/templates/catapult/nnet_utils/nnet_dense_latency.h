@@ -50,7 +50,7 @@ void dense_latency(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_out],
 
     data_T cache;
     // coverity[STACK_USE]
-    //typename CONFIG_T::accum_t mult[CONFIG_T::n_in * CONFIG_T::n_out];
+    // typename CONFIG_T::accum_t mult[CONFIG_T::n_in * CONFIG_T::n_out];
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
 
 // Initialize accumulator with input biases

@@ -1,5 +1,4 @@
-""" The clone templates in the fpga backend do not work for Catapult because ......
-"""
+"""The clone templates in the fpga backend do not work for Catapult because ......"""
 
 # from hls4ml.backends.fpga.passes.clone import Clone, CloneFunctionTemplate
 # from hls4ml.backends.template import FunctionCallTemplate

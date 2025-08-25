@@ -182,14 +182,13 @@ void init_invert_table(typename CONFIG_T::inv_table_t table_out[CONFIG_T::table_
     }
 }
 
-
 // This is a workaround to help the template deduction to work correctly and fix the inconsistency that HLS4ML expects
 // softmax output to be signed but AC Math softmax knows it is always unsigned
 template <unsigned K, int W1, int I1, bool S1, ac_q_mode Q1, ac_o_mode O1, int W2, int I2, bool S2, ac_q_mode Q2,
           ac_o_mode O2>
 void ac_softmax_pwl_wrapper(const ac_fixed<W1, I1, S1, Q1, O1> (&input)[K], ac_fixed<W2, I2, S2, Q2, O2> (&output)[K]) {
     ac_fixed<W2, I2, false, Q2, O2> tmp[K];
-    ac_math::ac_softmax_pwl_new<0,0,AC_TRN, K, W1,I1,S1,Q1,O1,W2,I2,Q2,O2>(input, tmp);
+    ac_math::ac_softmax_pwl_new<0, 0, AC_TRN, K, W1, I1, S1, Q1, O1, W2, I2, Q2, O2>(input, tmp);
     for (unsigned int x = 0; x < K; x++)
         output[x] = tmp[x];
 }
@@ -385,14 +384,12 @@ template <typename CONFIG_T, int N_TABLE> void init_elu_table(typename CONFIG_T:
     }
 }
 
-
 template <class data_T, class param_T, class res_T, typename CONFIG_T>
 void elu(data_T data[CONFIG_T::n_in], const param_T alpha, res_T res[CONFIG_T::n_in]) {
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         ac_math::ac_elu_pwl(data[ii], res[ii], alpha);
     }
 }
-
 
 // *************************************************
 //       SELU Activation
@@ -414,13 +411,11 @@ template <typename CONFIG_T, int N_TABLE> void init_selu_table(typename CONFIG_T
     }
 }
 
-
 template <class data_T, class res_T, typename CONFIG_T> void selu(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         res[ii] = ac_math::ac_selu_pwl<res_T>(data[ii]);
     }
 }
-
 
 // *************************************************
 //       PReLU Activation

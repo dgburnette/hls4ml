@@ -22,7 +22,6 @@ void resize_nearest(data_T image[CONFIG_T::height * CONFIG_T::width * CONFIG_T::
     int x_ratio = (int)((CONFIG_T::width << 16) / CONFIG_T::new_width) + 1;
     int x2, y2;
 
-
     for (int i = 0; i < CONFIG_T::new_height; i++) {
         for (int j = 0; j < CONFIG_T::new_width; j++) {
             x2 = ((j * x_ratio) >> 16);

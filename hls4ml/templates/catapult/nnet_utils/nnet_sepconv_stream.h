@@ -27,8 +27,6 @@ void depthwise_product(data_T data[CONFIG_T::kernel_size * CONFIG_T::n_chan], re
     // Add dummy loop to which the pipeline pragma can be applied
     do {
 
-
-
     // Do the matrix-multiply
     #pragma hls_unroll
     Product1:

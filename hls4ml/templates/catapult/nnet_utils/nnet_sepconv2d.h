@@ -67,7 +67,6 @@ void separable_conv_2d_cl(data_T data[CONFIG_T::depthwise_config::in_height * CO
                           typename CONFIG_T::depthwise_config::bias_t depthwise_biases[CONFIG_T::depthwise_config::n_chan],
                           typename CONFIG_T::pointwise_config::bias_t pointwise_biases[CONFIG_T::pointwise_config::n_filt]) {
 
-
     dw_res_T depthwise_results[CONFIG_T::depthwise_config::out_height * CONFIG_T::depthwise_config::out_width *
                                CONFIG_T::depthwise_config::n_chan];
     depthwise_conv_2d_cl<data_T, dw_res_T, typename CONFIG_T::depthwise_config>(data, depthwise_results, depthwise_weights,

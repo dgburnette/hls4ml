@@ -38,7 +38,6 @@ void conv_1d_full(data_T data[CONFIG_T::in_width * CONFIG_T::n_chan], res_T res[
     data_T data_col[CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-
     im2col_1d<data_T, CONFIG_T>(data, data_conv);
 
     for (int i = 0; i < CONFIG_T::out_width; i++) {
@@ -112,7 +111,6 @@ void conv_1d_resource_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width],
     data_T data_col[CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-
 ColLoop:
     for (int i = 0; i < CONFIG_T::out_width; i++) {
         im2col_1d_cf<data_T, CONFIG_T>(data, data_col, i);
@@ -180,7 +178,6 @@ void conv_1d_resource_cl(data_T data[CONFIG_T::in_width * CONFIG_T::n_chan],
     data_T data_col[CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-
 ColLoop:
     for (int i = 0; i < CONFIG_T::out_width; i++) {
         im2col_1d_cl<data_T, CONFIG_T>(data, data_col, i);
@@ -207,7 +204,6 @@ void pointwise_conv_1d_resource_cl(data_T data[CONFIG_T::in_width * CONFIG_T::n_
 
     data_T data_col[CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
-
 
 ColLoop:
     for (int i = 0; i < CONFIG_T::out_width; i++) {

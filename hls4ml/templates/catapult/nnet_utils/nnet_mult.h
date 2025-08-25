@@ -70,8 +70,7 @@ template <class x_T, class w_T> class mult : public Product {
         // 'Normal' product
         return a * w;
     }
-    static void limit(unsigned multiplier_limit) {
-    }
+    static void limit(unsigned multiplier_limit) {}
 };
 
 template <class x_T, class w_T> class weight_exponential : public Product {

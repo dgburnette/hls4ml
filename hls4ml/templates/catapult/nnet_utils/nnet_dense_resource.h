@@ -26,7 +26,6 @@ void dense_resource_rf_leq_nin(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::
     assert((multiplier_limit % nout == 0 || rufactor >= nin) && "The current Reuse Factor is not allowed");
     assert((multiplier_limit == block_factor) && "This function is correct only for RF <= N_IN");
 
-
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
 
 #pragma hls_unroll
@@ -90,7 +89,6 @@ void dense_resource_rf_gt_nin_rem0(data_T data[CONFIG_T::n_in], res_T res[CONFIG
 
     assert((multiplier_limit % nout == 0 || rufactor >= nin) && "The current Reuse Factor is not allowed");
     assert((rufactor > nin && rufactor % nin == 0) && "This function is correct only for RF > N_IN && RF % N_IN == 0");
-
 
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
 
@@ -166,7 +164,6 @@ void dense_resource_rf_gt_nin(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n
     assert((multiplier_limit % nout == 0 || rufactor >= nin) && "The current Reuse Factor is not allowed");
     assert((rufactor > nin) && "This function is correct only for RF > N_IN");
 
-
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
 
 #pragma hls_unroll
@@ -235,7 +232,6 @@ template <class data_T, class res_T, typename CONFIG_T>
 void dense_resource(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_out],
                     typename CONFIG_T::weight_t weights[CONFIG_T::n_in * CONFIG_T::n_out],
                     typename CONFIG_T::bias_t biases[CONFIG_T::n_out]) {
-
 
     if (CONFIG_T::reuse_factor <= CONFIG_T::n_in) {
         dense_resource_rf_leq_nin<data_T, res_T, CONFIG_T>(data, res, weights, biases);

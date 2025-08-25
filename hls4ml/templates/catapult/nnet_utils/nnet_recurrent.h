@@ -61,7 +61,6 @@ void lstm(bool reset_state, data_T data[CONFIG_T::n_in], res_T h_newstate[CONFIG
     typename CONFIG_T::accum_t inputacc_c[CONFIG_T::n_state];       // c-matrix (keras notation)
     typename CONFIG_T::accum_t s_actstate[CONFIG_T::n_state];
 
-
     nnet::dense<data_T, res_T, typename CONFIG_T::mult_config1>(data, tmpres, param, param_b);
     nnet::dense<data_T, res_T, typename CONFIG_T::mult_config2>(h_newstate, tmpres_state, param_r, param_br);
 
@@ -113,7 +112,6 @@ void lstm_static(bool reset_state, data_T data[CONFIG_T::n_in], res_T h_newstate
     typename CONFIG_T::accum_t inputacc_ifo[CONFIG_T::n_state * 3]; // i,f,o matrices (keras notation)
     typename CONFIG_T::accum_t inputacc_c[CONFIG_T::n_state];       // c-matrix (keras notation)
     typename CONFIG_T::accum_t s_actstate[CONFIG_T::n_state];
-
 
     if (reset_state) {
         for (int i_state = 0; i_state < (CONFIG_T::n_state); i_state++) {
@@ -170,7 +168,6 @@ void lstm_stack(data_T data[CONFIG_T::n_sequence * CONFIG_T::n_in], res_T res[CO
     res_T s_newstate[CONFIG_T::n_state];
     data_T data_in[CONFIG_T::n_in];
     bool reset_state = true;
-
 
     for (int ii = 0; ii < CONFIG_T::n_state; ii++) {
         h_newstate[ii] = 0;
@@ -295,7 +292,6 @@ void gru(bool reset_state, data_T data[CONFIG_T::n_in], res_T h_newstate[CONFIG_
     typename CONFIG_T::accum_t inputacc_zr[CONFIG_T::n_state * 2]; // i,f,o matrices (keras notation)
     typename CONFIG_T::accum_t inputacc_h[CONFIG_T::n_state];      // c-matrix (keras notation)
 
-
     nnet::dense<data_T, typename CONFIG_T::accum_t, typename CONFIG_T::mult_config1>(data, tmpres, param, param_b);
     nnet::dense<res_T, typename CONFIG_T::accum_t, typename CONFIG_T::mult_config2>(h_newstate, tmpres_state_zr, param_zr,
                                                                                     param_br);
@@ -350,7 +346,6 @@ void gru_static(bool reset_state, data_T data[CONFIG_T::n_in], res_T h_newstate[
     typename CONFIG_T::accum_t tmpres_h[CONFIG_T::n_state];        // activated c-matrix (keras notation)
     typename CONFIG_T::accum_t inputacc_zr[CONFIG_T::n_state * 2]; // i,f,o matrices (keras notation)
     typename CONFIG_T::accum_t inputacc_h[CONFIG_T::n_state];      // c-matrix (keras notation)
-
 
     if (reset_state) {
         for (int i_h_state = 0; i_h_state < (CONFIG_T::n_state); i_h_state++) {
@@ -407,7 +402,6 @@ void gru_stack(data_T data[CONFIG_T::n_sequence * CONFIG_T::n_in], res_T res[CON
     res_T h_state[CONFIG_T::n_state];
     data_T data_in[CONFIG_T::n_in];
     bool reset_state = true;
-
 
     for (int ii = 0; ii < CONFIG_T::n_state; ii++) {
         h_state[ii] = 0;

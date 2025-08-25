@@ -65,7 +65,6 @@ void compute_pool_encoded_2d(
         initialized = true;
     }
 
-
     if (data_T::size / CONFIG_T::n_filt > 1) {
     }
 
@@ -281,7 +280,6 @@ void compute_pool_encoded_1d(const unsigned w_idx, const data_T &in_elem,
         init_pool_table<CONFIG_T::n_in, CONFIG_T::pool_width>(pool_table_width);
         initialized = true;
     }
-
 
     if (data_T::size / CONFIG_T::n_filt > 1) {
     }

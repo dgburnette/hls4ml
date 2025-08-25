@@ -58,7 +58,6 @@ void conv_2d_full(
     data_T data_col[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-
     im2col_2d<data_T, CONFIG_T>(data, data_conv);
 
     for (int i = 0; i < CONFIG_T::out_height * CONFIG_T::out_width; i++) {
@@ -119,7 +118,6 @@ void conv_2d_resource_cf(
 
     data_T data_col[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
-
 
 HeightLoop:
     for (int i = 0; i < CONFIG_T::out_height; i++) {
@@ -203,7 +201,6 @@ void conv_2d_resource_cl(
     data_T data_col[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
 
-
 HeightLoop:
     for (int i = 0; i < CONFIG_T::out_height; i++) {
     WidthLoop:
@@ -234,7 +231,6 @@ void pointwise_conv_2d_resource_cl(data_T data[CONFIG_T::in_height * CONFIG_T::i
 
     data_T data_col[CONFIG_T::n_chan];
     res_T res_col[CONFIG_T::n_filt];
-
 
 HeightLoop:
     for (int i = 0; i < CONFIG_T::out_height; i++) {

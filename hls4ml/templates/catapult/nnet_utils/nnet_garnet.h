@@ -126,8 +126,7 @@ template <class CONFIG_T, class E = typename CONFIG_T::edge_weight_t> struct Mea
         }
     }
 
-    void set_weight(unsigned, edge_weight_t const &) {
-    }
+    void set_weight(unsigned, edge_weight_t const &) {}
 
     void add_means_normalized(Means<CONFIG_T, edge_weight_t> const &local) {
         // Always called within a pipelined region - no UNROLL needed
@@ -194,9 +193,7 @@ template <class CONFIG_T, class E = typename CONFIG_T::edge_weight_t> struct Wei
         unsigned const reshape_factor = CONFIG_T::n_aggregators * (CONFIG_T::n_vertices / CONFIG_T::reuse_factor);
     }
 
-    void set_weight(unsigned iva, edge_weight_t const &weight) {
-        edge_weights[iva] = weight;
-    }
+    void set_weight(unsigned iva, edge_weight_t const &weight) { edge_weights[iva] = weight; }
 };
 
 template <class CONFIG_T, class nvtx_T, class Enable = void> struct OutputBiasNormalizer;
@@ -207,8 +204,7 @@ struct OutputBiasNormalizer<CONFIG_T, nvtx_T, typename std::enable_if<CONFIG_T::
 
     biases_t const (&output_biases)[CONFIG_T::n_out_features];
 
-    OutputBiasNormalizer(nvtx_T const) : output_biases{CONFIG_T::output_transform_biases} {
-    }
+    OutputBiasNormalizer(nvtx_T const) : output_biases{CONFIG_T::output_transform_biases} {}
 };
 
 template <class CONFIG_T, class nvtx_T>
@@ -234,8 +230,7 @@ template <class CONFIG_T, class data_T> struct InputDataGetter {
 
     data_T const *dataref;
 
-    InputDataGetter(data_T const *d) : dataref{d} {
-    }
+    InputDataGetter(data_T const *d) : dataref{d} {}
     data_T const &get(unsigned iv, unsigned ix) const {
         unsigned const ivx = iv * CONFIG_T::n_in_features + ix;
         return dataref[ivx];
@@ -247,11 +242,8 @@ template <class CONFIG_T, class data_T> struct SingleVertexDataGetter {
 
     data_T const (&dataref)[CONFIG_T::n_in_features];
 
-    SingleVertexDataGetter(data_T const (&d)[CONFIG_T::n_in_features]) : dataref{d} {
-    }
-    data_T const &get(unsigned, unsigned ix) const {
-        return dataref[ix];
-    }
+    SingleVertexDataGetter(data_T const (&d)[CONFIG_T::n_in_features]) : dataref{d} {}
+    data_T const &get(unsigned, unsigned ix) const { return dataref[ix]; }
 };
 
 template <class CONFIG_T, class res_T> struct OutputResSetter {
@@ -259,8 +251,7 @@ template <class CONFIG_T, class res_T> struct OutputResSetter {
 
     res_T *resref;
 
-    OutputResSetter(res_T *r) : resref{r} {
-    }
+    OutputResSetter(res_T *r) : resref{r} {}
     void set(unsigned iv, unsigned io, res_T const &acc) {
         unsigned const ivo = iv * CONFIG_T::n_out_features + io;
         resref[ivo] = acc;
@@ -272,11 +263,8 @@ template <class CONFIG_T, class res_T> struct SingleVertexResSetter {
 
     res_T (&resref)[CONFIG_T::n_out_features];
 
-    SingleVertexResSetter(res_T (&r)[CONFIG_T::n_out_features]) : resref{r} {
-    }
-    void set(unsigned, unsigned io, res_T const &acc) {
-        resref[io] = acc;
-    }
+    SingleVertexResSetter(res_T (&r)[CONFIG_T::n_out_features]) : resref{r} {}
+    void set(unsigned, unsigned io, res_T const &acc) { resref[io] = acc; }
 };
 
 template <class CONFIG_T, class data_getter_T, class arrays_local_T, class arrays_T>

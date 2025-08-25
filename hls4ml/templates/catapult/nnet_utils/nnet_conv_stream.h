@@ -67,9 +67,7 @@ template <unsigned K, unsigned S, unsigned W> class scale_index_regular {
 
 template <unsigned K, unsigned S, unsigned W> class scale_index_unscaled {
   public:
-    static unsigned scale_index(const unsigned idx) {
-        return idx;
-    }
+    static unsigned scale_index(const unsigned idx) { return idx; }
 };
 
 template <class data_T, class res_T, typename CONFIG_T>
@@ -215,7 +213,6 @@ void shift_line_buffer(
     ap_shift_reg<typename data_T::value_type, CONFIG_T::in_width> line_buffer[MAX(CONFIG_T::filt_height - 1, 1)]
                                                                              [CONFIG_T::n_chan],
     typename data_T::value_type kernel_window[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan]) {
-
 
     // Temporary buffer for popped (shifted) elements
     typename data_T::value_type shift_buffer[CONFIG_T::filt_height][CONFIG_T::n_chan];

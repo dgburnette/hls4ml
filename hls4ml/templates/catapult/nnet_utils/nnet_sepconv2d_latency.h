@@ -25,7 +25,6 @@ void depthwise_conv_2d_latency_cl(
 
     typename CONFIG_T::accum_t acc[mult_n_out];
 
-
     // Limit multipliers to control parallelization
 
 #pragma hls_pipeline_init_interval ce_reuse_factor
