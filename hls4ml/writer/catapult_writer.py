@@ -1,7 +1,9 @@
 import glob
 import os
+import stat
 import tarfile
 from collections import OrderedDict
+from pathlib import Path
 from shutil import copyfile, copytree, rmtree
 
 import numpy as np
@@ -171,7 +173,7 @@ class CatapultWriter(Writer):
             # layer.get_output_variable().type.precision.width
             # layer.get_output_variable().type.precision.integer
             # layer.get_output_variable().type.precision.sign
-            for _k, v in layer.get_output_variable().get_shape():
+            for v in layer.get_output_variable().shape:
                 shape = shape + "[" + str(v) + "]"
 
             if layer.attributes.layer.class_name != 'Input':
@@ -411,21 +413,7 @@ class CatapultWriter(Writer):
         fout = open(f'{model.config.get_output_dir()}/firmware/defines.h', 'w')
 
         for line in f.readlines():
-            # Insert numbers
-            if '// hls-fpga-machine-learning insert numbers' in line:
-                newline = line
-
-                defines_list = []
-                for layer in model.get_layers():
-                    defines = ''
-                    for k, v in layer.get_output_variable().get_shape():
-                        defines += f'#define {k} {v}\n'
-
-                    defines_list.append(defines)
-
-                newline += ''.join(defines_list)
-
-            elif '// hls-fpga-machine-learning insert layer-precision' in line:
+            if '// hls-fpga-machine-learning insert layer-precision' in line:
                 newline = line
                 all_precision = OrderedDict()
                 for layer in model.get_layers():
@@ -674,6 +662,9 @@ class CatapultWriter(Writer):
                 newline = line.replace('MYPROJECT', format(model.config.get_project_name().upper()))
             elif 'myproject' in line:
                 newline = line.replace('myproject', format(model.config.get_project_name()))
+            elif '// hls-fpga-machine-learning insert weights dir' in line:
+                weights_dir = (Path(fout.name).parent / 'firmware/weights').resolve()
+                newline = f'static std::string s_weights_dir = "{weights_dir}";\n'
             elif '// hls-fpga-machine-learning insert bram' in line:
                 newline = line
                 for bram in model_brams:
@@ -749,55 +740,50 @@ class CatapultWriter(Writer):
             model (ModelGraph): the hls4ml model.
         """
 
-        filedir = os.path.dirname(os.path.abspath(__file__))
+        filedir = Path(__file__).parent
 
         # build_prj.tcl
-        srcpath = os.path.join(filedir, '../templates/catapult/build_prj.tcl')
-        dstpath = f'{model.config.get_output_dir()}/build_prj.tcl'
-        # copyfile(srcpath, dstpath)
-        f = open(srcpath)
-        fout = open(dstpath, 'w')
-        for line in f.readlines():
-            indent = line[: len(line) - len(line.lstrip())]
-            line = line.replace('myproject', model.config.get_project_name())
-            line = line.replace('CATAPULT_DIR', model.config.get_project_dir())
-            if '#hls-fpga-machine-learning insert techlibs' in line:
-                if model.config.get_config_value('Technology') is None:
-                    if model.config.get_config_value('Part') is not None:
-                        line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
-                    elif model.config.get_config_value('ASICLibs') is not None:
-                        line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
-                else:
-                    if model.config.get_config_value('Technology') == 'asic':
-                        line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
+        srcpath = (filedir / '../templates/catapult/build_prj.tcl').resolve()
+        dstpath = Path(f'{model.config.get_output_dir()}/build_prj.tcl').resolve()
+        with open(srcpath) as src, open(dstpath, 'w') as dst:
+            for line in src.readlines():
+                indent = line[: len(line) - len(line.lstrip())]
+                line = line.replace('myproject', model.config.get_project_name())
+                line = line.replace('CATAPULT_DIR', model.config.get_project_dir())
+                if '#hls-fpga-machine-learning insert techlibs' in line:
+                    if model.config.get_config_value('Technology') is None:
+                        if model.config.get_config_value('Part') is not None:
+                            line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
+                        elif model.config.get_config_value('ASICLibs') is not None:
+                            line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
                     else:
-                        line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
-            elif '#hls-fpga-machine-learning insert invoke_args' in line:
-                tb_in_file = model.config.get_config_value('InputData')
-                tb_out_file = model.config.get_config_value('OutputPredictions')
-                invoke_args = '$sfd/firmware/weights'
-                if tb_in_file is not None:
-                    invoke_args = invoke_args + f' $sfd/tb_data/{tb_in_file}'
-                if tb_out_file is not None:
-                    invoke_args = invoke_args + f' $sfd/tb_data/{tb_out_file}'
-                line = indent + f'flow package option set /SCVerify/INVOKE_ARGS "{invoke_args}"\n'
-            elif 'set hls_clock_period 5' in line:
-                line = indent + 'set hls_clock_period {}\n'.format(model.config.get_config_value('ClockPeriod'))
-            fout.write(line)
-        f.close()
-        fout.close()
+                        if model.config.get_config_value('Technology') == 'asic':
+                            line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
+                        else:
+                            line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
+                elif '#hls-fpga-machine-learning insert invoke_args' in line:
+                    tb_in_file = model.config.get_config_value('InputData')
+                    tb_out_file = model.config.get_config_value('OutputPredictions')
+                    invoke_args = '$sfd/firmware/weights'
+                    if tb_in_file is not None:
+                        invoke_args = invoke_args + f' $sfd/tb_data/{tb_in_file}'
+                    if tb_out_file is not None:
+                        invoke_args = invoke_args + f' $sfd/tb_data/{tb_out_file}'
+                    line = indent + f'flow package option set /SCVerify/INVOKE_ARGS "{invoke_args}"\n'
+                elif 'set hls_clock_period 5' in line:
+                    line = indent + 'set hls_clock_period {}\n'.format(model.config.get_config_value('ClockPeriod'))
+                dst.write(line)
 
         # build_lib.sh
-        f = open(os.path.join(filedir, '../templates/catapult/build_lib.sh'))
-        fout = open(f'{model.config.get_output_dir()}/build_lib.sh', 'w')
+        build_lib_src = (filedir / '../templates/catapult/build_lib.sh').resolve()
+        build_lib_dst = Path(f'{model.config.get_output_dir()}/build_lib.sh').resolve()
+        with open(build_lib_src) as src, open(build_lib_dst, 'w') as dst:
+            for line in src.readlines():
+                line = line.replace('myproject', model.config.get_project_name())
+                line = line.replace('mystamp', model.config.get_config_value('Stamp'))
 
-        for line in f.readlines():
-            line = line.replace('myproject', model.config.get_project_name())
-            line = line.replace('mystamp', model.config.get_config_value('Stamp'))
-
-            fout.write(line)
-        f.close()
-        fout.close()
+                dst.write(line)
+        build_lib_dst.chmod(build_lib_dst.stat().st_mode | stat.S_IEXEC)
 
     def write_nnet_utils(self, model):
         """Copy the nnet_utils, AP types headers and any custom source to the project output directory
@@ -889,7 +875,9 @@ class CatapultWriter(Writer):
             return dumper.represent_scalar('!keras_model', model_path)
 
         try:
-            from tensorflow.keras import Model as KerasModel
+            import keras
+
+            KerasModel = keras.models.Model
 
             yaml.add_multi_representer(KerasModel, keras_model_representer)
         except Exception:
@@ -912,7 +900,6 @@ class CatapultWriter(Writer):
             print("Project .tar.gz archive already exists")
 
     def write_hls(self, model):
-        print('Writing HLS project')
         self.write_output_dir(model)
         self.write_project_cpp(model)
         self.write_project_header(model)
@@ -926,4 +913,3 @@ class CatapultWriter(Writer):
         self.write_generated_code(model)
         self.write_yml(model)
         self.write_tar(model)
-        print('Done')

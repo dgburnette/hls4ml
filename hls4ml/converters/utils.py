@@ -9,7 +9,7 @@ def parse_data_format(input_shape, data_format='channels_last'):
     will have the channels dimension last.
 
     Args:
-        input_shape (list or tuple): Input shape of 2D or 3D tensor with optional batch dimension of ``None``.
+        input_shape (list or tuple): Input shape of 2D, 3D or 4D tensor with optional batch dimension of ``None``.
         data_format (str, optional): Data format type, one of ``channels_first`` or ``channels_last``. (case insensitive).
             Defaults to 'channels_last'.
 
@@ -19,21 +19,28 @@ def parse_data_format(input_shape, data_format='channels_last'):
     Returns:
         tuple: The input shape (without the batch dimension) in ``channels_last`` format.
     """
-    if input_shape[0] is None:
-        # Ignore batch size
-        input_shape = input_shape[1:]
+
+    # Ignore batch size
+    input_shape = input_shape[1:]
+
+    if len(input_shape) > 4:
+        raise Exception(f'Cannot parse tensor with {len(input_shape)} dimensions.')
 
     if data_format.lower() == 'channels_last':
         if len(input_shape) == 2:  # 1D, (n_in, n_filt)
             return (input_shape[0], input_shape[1])
         elif len(input_shape) == 3:  # 2D, (in_height, in_width, n_filt)
             return (input_shape[0], input_shape[1], input_shape[2])
+        elif len(input_shape) == 4:  # 3D, (time_steps, in_height, in_width, n_filt)
+            return (input_shape[0], input_shape[1], input_shape[2], input_shape[3])
 
     elif data_format.lower() == 'channels_first':
         if len(input_shape) == 2:  # 1D, (n_filt, n_in)
             return (input_shape[1], input_shape[0])
         elif len(input_shape) == 3:  # 2D, (n_filt, in_height, in_width)
             return (input_shape[1], input_shape[2], input_shape[0])
+        elif len(input_shape) == 4:  # 3D, (time_steps, n_filt, in_height, in_width)
+            return (input_shape[0], input_shape[2], input_shape[3], input_shape[1])
     else:
         raise Exception(f'Unknown data format: {data_format}')
 
@@ -45,7 +52,7 @@ def compute_padding_1d(pad_type, in_size, stride, filt_size):
     is odd, it will add the extra column to the right.
 
     Args:
-        pad_type (str): Padding type, one of ``same``, `valid`` or ``causal`` (case insensitive).
+        pad_type (str): Padding type, one of ``same``, ``valid`` or ``causal`` (case insensitive).
         in_size (int): Input size.
         stride (int): Stride length.
         filt_size (int): Length of the kernel window.
@@ -135,6 +142,23 @@ def compute_padding_2d(pad_type, in_height, in_width, stride_height, stride_widt
 
 
 def compute_padding_1d_pytorch(pad_type, in_size, stride, filt_size, dilation):
+    """Computes the amount of padding required on each side of the 1D input tensor following pytorch conventions.
+
+    In case of ``same`` padding, this routine tries to pad evenly left and right, but if the amount of columns to be added
+    is odd, it will add the extra column to the right.
+
+    Args:
+        pad_type (str or int): Padding type. If string, one of ``same``, ``valid`` or ``causal`` (case insensitive).
+        in_size (int): Input size.
+        stride (int): Stride length.
+        filt_size (int): Length of the kernel window.
+
+    Raises:
+        Exception: Raised if the padding type is unknown.
+
+    Returns:
+        tuple: Tuple containing the padded input size, left and right padding values.
+    """
     if isinstance(pad_type, str):
         if pad_type.lower() == 'same':
             n_out = int(
@@ -176,6 +200,26 @@ def compute_padding_1d_pytorch(pad_type, in_size, stride, filt_size, dilation):
 def compute_padding_2d_pytorch(
     pad_type, in_height, in_width, stride_height, stride_width, filt_height, filt_width, dilation_height, dilation_width
 ):
+    """Computes the amount of padding required on each side of the 2D input tensor following pytorch conventions.
+
+    In case of ``same`` padding, this routine tries to pad evenly left and right (top and bottom), but if the amount of
+    columns to be added is odd, it will add the extra column to the right/bottom.
+
+    Args:
+        pad_type (str or int): Padding type. If string, one of ``same`` or ``valid`` (case insensitive).
+        in_height (int): The height of the input tensor.
+        in_width (int): The width of the input tensor.
+        stride_height (int): Stride height.
+        stride_width (int): Stride width.
+        filt_height (int): Height of the kernel window.
+        filt_width (int): Width of the kernel window.
+
+    Raises:
+        Exception: Raised if the padding type is unknown.
+
+    Returns:
+        tuple: Tuple containing the padded input height, width, and top, bottom, left and right padding values.
+    """
     if isinstance(pad_type, str):
         if pad_type.lower() == 'same':
             # Height

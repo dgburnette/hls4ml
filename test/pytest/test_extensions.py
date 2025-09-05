@@ -31,8 +31,7 @@ class HReverse(hls4ml.model.layers.Layer):
     def initialize(self):
         inp = self.get_input_variable()
         shape = inp.shape
-        dims = inp.dim_names
-        self.add_output_variable(shape, dims)
+        self.add_output_variable(shape)
 
 
 # hls4ml optimizer to remove duplicate optimizer
@@ -46,8 +45,8 @@ class RemoveDuplicateReverse(hls4ml.model.optimizer.OptimizerPass):
         first = node.get_input_node()
         second = node
 
-        model.remove_node(first, rewire=True)
-        model.remove_node(second, rewire=True)
+        model.remove_node(first)
+        model.remove_node(second)
         return True
 
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from hls4ml.converters.keras_to_hls import keras_handler, parse_default_keras_layer
+from hls4ml.converters.keras_v2_to_hls import keras_handler, parse_default_keras_layer
 from hls4ml.converters.utils import parse_data_format
 
 
@@ -11,8 +11,8 @@ def parse_flatten_layer(keras_layer, input_names, input_shapes, data_reader):
     layer = parse_default_keras_layer(keras_layer, input_names)
 
     layer['class_name'] = 'Reshape'
-    layer['target_shape'] = [input_shapes[0][0], np.prod(input_shapes[0][1:])]
-    output_shape = layer['target_shape']
+    layer['target_shape'] = [np.prod(input_shapes[0][1:])]  # target shape has no batch dimension
+    output_shape = input_shapes[0][:1] + layer['target_shape']
 
     return layer, output_shape
 
@@ -24,7 +24,7 @@ def parse_reshape_layer(keras_layer, input_names, input_shapes, data_reader):
     layer = parse_default_keras_layer(keras_layer, input_names)
 
     layer['target_shape'] = keras_layer['config']['target_shape']
-    output_shape = input_shapes[0][:1] + keras_layer['config']['target_shape']
+    output_shape = input_shapes[0][:1] + list(keras_layer['config']['target_shape'])
 
     return layer, output_shape
 
@@ -36,7 +36,7 @@ def parse_upsampling1d_layer(keras_layer, input_names, input_shapes, data_reader
     layer = parse_default_keras_layer(keras_layer, input_names)
 
     layer['in_height'] = 1
-    (layer['in_width'], layer['n_chan']) = parse_data_format(input_shapes[0], layer['data_format'])
+    (*_, layer['in_width'], layer['n_chan']) = parse_data_format(input_shapes[0], layer['data_format'])
 
     layer['algorithm'] = 'nearest'
 
@@ -59,7 +59,7 @@ def parse_upsampling2d_layer(keras_layer, input_names, input_shapes, data_reader
 
     layer = parse_default_keras_layer(keras_layer, input_names)
 
-    (layer['in_height'], layer['in_width'], layer['n_chan']) = parse_data_format(input_shapes[0], layer['data_format'])
+    (*_, layer['in_height'], layer['in_width'], layer['n_chan']) = parse_data_format(input_shapes[0], layer['data_format'])
 
     layer['algorithm'] = keras_layer['config']['interpolation']
 

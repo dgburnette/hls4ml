@@ -2,7 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from sklearn.metrics import accuracy_score
 from tensorflow.keras.models import model_from_json
 
 import hls4ml
@@ -13,7 +12,7 @@ example_model_path = (test_root_path / '../../example-models').resolve()
 
 @pytest.fixture(scope='module')
 def data():
-    X = np.random.rand(100, 10, 4)
+    X = np.random.rand(1000, 10, 4)
     return X
 
 
@@ -33,6 +32,8 @@ def keras_model():
     [
         ('Quartus', 'io_parallel', 'resource'),
         ('Quartus', 'io_stream', 'resource'),
+        ('oneAPI', 'io_parallel', 'resource'),
+        ('oneAPI', 'io_stream', 'resource'),
         ('Vivado', 'io_parallel', 'resource'),
         ('Vivado', 'io_parallel', 'latency'),
         ('Vivado', 'io_stream', 'latency'),
@@ -85,6 +86,8 @@ def hls_model(keras_model, backend, io_type, strategy):
     [
         ('Quartus', 'io_parallel', 'resource'),
         ('Quartus', 'io_stream', 'resource'),
+        ('oneAPI', 'io_parallel', 'resource'),
+        ('oneAPI', 'io_stream', 'resource'),
         ('Vivado', 'io_parallel', 'resource'),
         ('Vivado', 'io_parallel', 'latency'),
         ('Vivado', 'io_stream', 'latency'),
@@ -106,6 +109,5 @@ def test_accuracy(data, keras_model, hls_model):
     y_hls4ml = hls_model.predict(X)
 
     # "Accuracy" of hls4ml predictions vs keras
-    rel_acc = accuracy_score(np.argmax(y_keras, axis=1), np.argmax(y_hls4ml, axis=1))
-    print(f'hls4ml accuracy relative to keras: {rel_acc}')
-    assert rel_acc > 0.98
+    mae = np.mean(np.abs(y_keras - y_hls4ml))
+    assert mae < 9e-3

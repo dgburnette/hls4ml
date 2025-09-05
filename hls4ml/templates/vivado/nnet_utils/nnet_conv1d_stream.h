@@ -45,7 +45,8 @@ void conv_1d_encoded_cl(hls::stream<data_T> &data, hls::stream<res_T> &res,
 ReadInputWidth:
     for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width / (data_T::size / CONFIG_T::n_chan); i_iw++) {
         #pragma HLS LOOP_FLATTEN
-        if (CONFIG_T::strategy == nnet::latency && data_T::size / CONFIG_T::n_chan == 1) {
+        if ((CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) &&
+            data_T::size / CONFIG_T::n_chan == 1) {
             #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
         }
         compute_scaled_indices_1d<data_T, CONFIG_T>(i_iw, pixel_idx);
@@ -60,10 +61,14 @@ void conv_1d_buffer_cl(hls::stream<data_T> &data, hls::stream<res_T> &res,
                        typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
     assert(CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
 
+    if (CONFIG_T::strategy == nnet::resource_unrolled && CONFIG_T::reuse_factor > 1) {
+        #pragma HLS allocation instances=compute_output_buffer_1d limit=1 function
+    }
+
 ReadInputWidth:
     for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width; i_iw++) {
         #pragma HLS LOOP_FLATTEN
-        if (CONFIG_T::strategy == nnet::latency) {
+        if (CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) {
             #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
         }
         compute_output_buffer_1d<data_T, res_T, CONFIG_T>(data.read(), res, weights, biases);

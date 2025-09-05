@@ -37,7 +37,8 @@ ReadInputHeight:
     ReadInputWidth:
         for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width / (data_T::size / CONFIG_T::n_chan); i_iw++) {
             #pragma HLS LOOP_FLATTEN
-            if (CONFIG_T::strategy == nnet::latency && data_T::size / CONFIG_T::n_chan == 1) {
+            if ((CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) &&
+                data_T::size / CONFIG_T::n_chan == 1) {
                 #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
             }
             compute_scaled_indices_2d<data_T, CONFIG_T>(i_ih, i_iw, pixel_idx);
@@ -64,7 +65,7 @@ ReadInputHeight:
     ReadInputWidth:
         for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width; i_iw++) {
             #pragma HLS LOOP_FLATTEN
-            if (CONFIG_T::strategy == nnet::latency) {
+            if (CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) {
                 #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
             }
             if (CONFIG_T::filt_height > 1) {
@@ -81,6 +82,9 @@ void depthwise_conv_2d_cl(
     hls::stream<data_T> &data, hls::stream<res_T> &res,
     typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan],
     typename CONFIG_T::bias_t biases[CONFIG_T::n_chan]) {
+
+    assert((CONFIG_T::n_filt == CONFIG_T::n_chan) && "only a depth multiplier of 1 is currently supported");
+
     #pragma HLS inline recursive
     switch (CONFIG_T::implementation) {
     case conv_implementation::linebuffer:
@@ -106,7 +110,8 @@ ReadInputHeight:
     for (unsigned i_ih = 0; i_ih < CONFIG_T::in_height; i_ih++) {
     ReadInputWidth:
         for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width / (data_T::size / CONFIG_T::n_chan); i_iw++) {
-            if (CONFIG_T::strategy == nnet::latency && data_T::size / CONFIG_T::n_chan == 1) {
+            if ((CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) &&
+                data_T::size / CONFIG_T::n_chan == 1) {
                 #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
             }
             if (i_ih % CONFIG_T::stride_height == 0 && i_iw % CONFIG_T::stride_width == 0) {
@@ -130,7 +135,7 @@ void separable_conv_2d_cl(hls::stream<data_T> &data, hls::stream<res_T> &res,
     #pragma HLS DATAFLOW
 
     hls::stream<dw_res_T> depthwise_res;
-    unsigned res_depth = CONFIG_T::depthwise_config::out_height * CONFIG_T::depthwise_config::out_width;
+    constexpr unsigned res_depth = CONFIG_T::depthwise_config::out_height * CONFIG_T::depthwise_config::out_width;
     #pragma HLS STREAM variable=depthwise_res depth=res_depth
 
     depthwise_conv_2d_cl<data_T, dw_res_T, typename CONFIG_T::depthwise_config>(data, depthwise_res, depthwise_weights,

@@ -161,7 +161,7 @@ if {$opt(reset)} {
 } else {
     open_solution "solution1"
 }
-catch {config_array_partition -maximum_size 4096}
+catch {config_array_partition -maximum_size $maximum_size}
 config_compile -name_max_length 80
 set_part $part
 config_schedule -enable_dsp_full_reg=false
@@ -179,6 +179,7 @@ if {$opt(csim)} {
 
 if {$opt(synth)} {
     puts "***** C/RTL SYNTHESIS *****"
+
     set time_start [clock clicks -milliseconds]
     csynth_design
     set time_end [clock clicks -milliseconds]
@@ -195,7 +196,10 @@ if {$opt(cosim)} {
 
     if {$opt(fifo_opt)} {
         puts "\[hls4ml\] - FIFO optimization started"
-        add_vcd_instructions_tcl
+
+        if {[string equal "$backend" "vivado"] || [string equal $backend "vivadoaccelerator"]} {
+            add_vcd_instructions_tcl
+        }
     }
 
     remove_recursive_log_wave
@@ -236,13 +240,13 @@ if {$opt(export)} {
 
 if {$opt(vsynth)} {
     puts "***** VIVADO SYNTHESIS *****"
-    if {[file exist ${project_name}_prj/solution1/syn/vhdl]} {
+    if {[file exist ${project_name}_prj/solution1/syn/verilog]} {
         set time_start [clock clicks -milliseconds]
         exec vivado -mode batch -source vivado_synth.tcl >@ stdout
         set time_end [clock clicks -milliseconds]
         report_time "VIVADO SYNTHESIS" $time_start $time_end
     } else {
-        puts "ERROR: Cannot find generated VHDL files. Did you run C synthesis?"
+        puts "ERROR: Cannot find generated Verilog files. Did you run C synthesis?"
         exit 1
     }
 }

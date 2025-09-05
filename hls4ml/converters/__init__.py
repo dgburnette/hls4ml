@@ -1,40 +1,29 @@
 import importlib
 import os
-import warnings
 
 import yaml
 
-from hls4ml.converters.keras_to_hls import KerasFileReader  # noqa: F401
-from hls4ml.converters.keras_to_hls import KerasModelReader  # noqa: F401
-from hls4ml.converters.keras_to_hls import KerasReader  # noqa: F401
-from hls4ml.converters.keras_to_hls import get_supported_keras_layers  # noqa: F401
-from hls4ml.converters.keras_to_hls import parse_keras_model  # noqa: F401
-from hls4ml.converters.keras_to_hls import keras_to_hls, register_keras_layer_handler
+from hls4ml.converters.keras_v2_to_hls import KerasFileReader  # noqa: F401
+from hls4ml.converters.keras_v2_to_hls import KerasModelReader  # noqa: F401
+from hls4ml.converters.keras_v2_to_hls import KerasReader  # noqa: F401
+from hls4ml.converters.keras_v2_to_hls import get_supported_keras_layers  # noqa: F401
+from hls4ml.converters.keras_v2_to_hls import parse_keras_model  # noqa: F401
+from hls4ml.converters.keras_v2_to_hls import keras_v2_to_hls, register_keras_layer_handler
+from hls4ml.converters.keras_v3_to_hls import keras_v3_to_hls, parse_keras_v3_model  # noqa: F401
+from hls4ml.converters.onnx_to_hls import get_supported_onnx_layers  # noqa: F401
+from hls4ml.converters.onnx_to_hls import parse_onnx_model  # noqa: F401
+from hls4ml.converters.onnx_to_hls import onnx_to_hls, register_onnx_layer_handler
+from hls4ml.converters.pytorch_to_hls import (  # noqa: F401
+    get_supported_pytorch_layers,
+    pytorch_to_hls,
+    register_pytorch_layer_handler,
+)
 from hls4ml.model import ModelGraph
 from hls4ml.utils.config import create_config
+from hls4ml.utils.dependency import requires
+from hls4ml.utils.link import FilesystemModelGraph
+from hls4ml.utils.serialization import deserialize_model
 from hls4ml.utils.symbolic_utils import LUTFunction
-
-# ----------Make converters available if the libraries can be imported----------#
-try:
-    from hls4ml.converters.pytorch_to_hls import (  # noqa: F401
-        get_supported_pytorch_layers,
-        pytorch_to_hls,
-        register_pytorch_layer_handler,
-    )
-
-    __pytorch_enabled__ = True
-except ImportError:
-    warnings.warn("WARNING: Pytorch converter is not enabled!", stacklevel=1)
-    __pytorch_enabled__ = False
-
-try:
-    from hls4ml.converters.onnx_to_hls import get_supported_onnx_layers  # noqa: F401
-    from hls4ml.converters.onnx_to_hls import onnx_to_hls, register_onnx_layer_handler
-
-    __onnx_enabled__ = True
-except ImportError:
-    warnings.warn("WARNING: ONNX converter is not enabled!", stacklevel=1)
-    __onnx_enabled__ = False
 
 # ----------Layer handling register----------#
 model_types = ['keras', 'pytorch', 'onnx']
@@ -50,7 +39,7 @@ for model_type in model_types:
                 # and has 'handles' attribute
                 # and is defined in this module (i.e., not imported)
                 if callable(func) and hasattr(func, 'handles') and func.__module__ == lib.__name__:
-                    for layer in func.handles:
+                    for layer in func.handles:  # type: ignore
                         if model_type == 'keras':
                             register_keras_layer_handler(layer, func)
                         elif model_type == 'pytorch':
@@ -92,10 +81,10 @@ def parse_yaml_config(config_file):
     """
 
     def construct_keras_model(loader, node):
-        from tensorflow.keras.models import load_model
-
         model_str = loader.construct_scalar(node)
-        return load_model(model_str)
+        import keras
+
+        return keras.models.load_model(model_str)
 
     yaml.add_constructor('!keras_model', construct_keras_model, Loader=yaml.SafeLoader)
 
@@ -123,17 +112,11 @@ def convert_from_config(config):
 
     model = None
     if 'OnnxModel' in yamlConfig:
-        if __onnx_enabled__:
-            model = onnx_to_hls(yamlConfig)
-        else:
-            raise Exception("ONNX not found. Please install ONNX.")
+        model = onnx_to_hls(yamlConfig)
     elif 'PytorchModel' in yamlConfig:
-        if __pytorch_enabled__:
-            model = pytorch_to_hls(yamlConfig)
-        else:
-            raise Exception("PyTorch not found. Please install PyTorch.")
+        model = pytorch_to_hls(yamlConfig)
     else:
-        model = keras_to_hls(yamlConfig)
+        model = keras_v2_to_hls(yamlConfig)
 
     return model
 
@@ -173,6 +156,7 @@ def _check_model_config(model_config):
     return model_config
 
 
+@requires('_keras')
 def convert_from_keras_model(
     model,
     output_dir='my-hls-test',
@@ -232,13 +216,18 @@ def convert_from_keras_model(
     config['HLSConfig']['Model'] = _check_model_config(model_config)
 
     _check_hls_config(config, hls_config)
+    if 'KerasModel' in config:
+        import keras
 
-    return keras_to_hls(config)
+        if keras.__version__ >= '3.0':
+            return keras_v3_to_hls(config)
+
+    return keras_v2_to_hls(config)
 
 
+@requires('_torch')
 def convert_from_pytorch_model(
     model,
-    input_shape,
     output_dir='my-hls-test',
     project_name='myproject',
     input_data_tb=None,
@@ -251,7 +240,6 @@ def convert_from_pytorch_model(
 
     Args:
         model: PyTorch model to convert.
-        input_shape (list): The shape of the input tensor. First element is the batch size, needs to be None
         output_dir (str, optional): Output directory of the generated HLS project. Defaults to 'my-hls-test'.
         project_name (str, optional): Name of the HLS project. Defaults to 'myproject'.
         input_data_tb (str, optional): String representing the path of input data in .npy or .dat format that will be
@@ -279,9 +267,10 @@ def convert_from_pytorch_model(
     Notes:
         Pytorch uses the "channels_first" data format for its tensors, while hls4ml expects the "channels_last" format
         used by keras. By default, hls4ml will automatically add layers to the model which transpose the inputs to the
-        "channels_last"format. Not that this is not supported for the "io_stream" io_type, for which the user will have
-        to transpose the input by hand before passing it to hls4ml. In that case the "inputs_channel_last" argument of
-        the "config_from_pytorch_model" function needs to be set to True. By default, the output of the model remains
+        "channels_last" format. Not that this is not supported for the "io_stream" io_type, for which the user will have
+        to transpose the input by hand before passing it to hls4ml. In that case the "channels_last_conversion" argument of
+        the "config_from_pytorch_model" function needs to be set to "internal". This argument can be used to completely
+        disable this internal conversion. By default, the output of the model remains
         in the "channels_last" data format. The "transpose_outputs" argument of the "config_from_pytorch_model" can be
         used to add a layer to the model that transposes back to "channels_first". As before, this will not work for
         io_stream.
@@ -293,7 +282,6 @@ def convert_from_pytorch_model(
     config = create_config(output_dir=output_dir, project_name=project_name, backend=backend, **kwargs)
 
     config['PytorchModel'] = model
-    config['InputShape'] = input_shape
     config['InputData'] = input_data_tb
     config['OutputPredictions'] = output_data_tb
     config['HLSConfig'] = {}
@@ -301,14 +289,15 @@ def convert_from_pytorch_model(
     if hls_config is None:
         hls_config = {}
 
-    model_config = hls_config.get('Model', None)
+    model_config = hls_config.get('Model')
     config['HLSConfig']['Model'] = _check_model_config(model_config)
-
+    config['InputShape'] = hls_config.get('InputShape')
     _check_hls_config(config, hls_config)
 
     return pytorch_to_hls(config)
 
 
+@requires('onnx')
 def convert_from_onnx_model(
     model,
     output_dir='my-hls-test',
@@ -372,6 +361,7 @@ def convert_from_onnx_model(
     return onnx_to_hls(config)
 
 
+@requires('sr')
 def convert_from_symbolic_expression(
     expr,
     n_symbols=None,
@@ -482,6 +472,42 @@ def convert_from_symbolic_expression(
 
     config['HLSConfig'] = {'Model': {'Precision': precision, 'ReuseFactor': 1}}
 
-    hls_model = ModelGraph(config, layer_list)
+    hls_model = ModelGraph.from_layer_list(config, layer_list)
 
     return hls_model
+
+
+def link_existing_project(project_dir):
+    """Create a stripped-down ModelGraph from an existing project previously generated by hls4ml.
+
+    The returned ModelGraph will only allow compile(), predict() and build() functions to be invoked.
+
+    Args:
+        project_dir (str): Path to the existing HLS project previously generated with hls4ml.
+
+    Returns:
+        FilesystemModelGraph: hls4ml model.
+    """
+    return FilesystemModelGraph(project_dir)
+
+
+def load_saved_model(file_path, output_dir=None):
+    """
+    Loads an hls4ml model from a compressed file format (.fml).
+
+    See `hls4ml.utils.serialization.deserialize_model` for more details.
+
+    Args:
+        file_path (str or pathlib.Path): The path to the serialized model file (.fml).
+        output_dir (str or pathlib.Path, optional): The directory where extracted
+            testbench data files will be saved. If not specified, the files will
+            be restored to the same directory as the `.fml` file.
+
+    Returns:
+        ModelGraph: The deserialized hls4ml model.
+
+    Raises:
+        FileNotFoundError: If the specified `.fml` file does not exist.
+        OSError: If an I/O error occurs during extraction or file operations.
+    """
+    return deserialize_model(file_path, output_dir=output_dir)

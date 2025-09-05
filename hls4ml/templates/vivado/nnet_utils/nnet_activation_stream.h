@@ -109,19 +109,19 @@ void softmax_latency(hls::stream<data_T> &data, hls::stream<res_T> &res) {
     // Initialize the lookup tables
 #ifdef __HLS_SYN__
     bool initialized = false;
-    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::table_size];
-    typename CONFIG_T::inv_table_t invert_table[CONFIG_T::table_size];
+    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
 #else
     static bool initialized = false;
-    static typename CONFIG_T::exp_table_t exp_table[CONFIG_T::table_size];
-    static typename CONFIG_T::inv_table_t invert_table[CONFIG_T::table_size];
+    static typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    static typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
 
 #endif
     if (!initialized) {
         // Note we are exponentiating the inputs, which have type data_T
         init_exp_table<typename data_T::value_type, CONFIG_T>(exp_table);
         // Note we are inverting the exponentials, which have type exp_table_t
-        init_invert_table<typename CONFIG_T::exp_table_t, CONFIG_T>(invert_table);
+        init_invert_table<typename CONFIG_T::inv_inp_t, CONFIG_T>(invert_table);
         initialized = true;
     }
 
@@ -129,9 +129,9 @@ void softmax_latency(hls::stream<data_T> &data, hls::stream<res_T> &res) {
     constexpr unsigned ii = data_T::size / multiplier_limit;
 
     // Calculate all the e^x's
-    typename CONFIG_T::exp_table_t exp_res[data_T::size];
+    typename CONFIG_T::accum_t exp_res[data_T::size];
     #pragma HLS array_partition variable=exp_res complete
-    typename CONFIG_T::exp_table_t exp_sum(0);
+    typename CONFIG_T::inv_inp_t exp_sum(0);
 SoftmaxExpLoop:
     for (unsigned i = 0; i < CONFIG_T::n_in / data_T::size; i++) {
         #pragma HLS PIPELINE II=ii
@@ -140,18 +140,17 @@ SoftmaxExpLoop:
     SoftmaxExpPackLoop:
         for (unsigned j = 0; j < data_T::size; j++) {
             #pragma HLS UNROLL
-            unsigned x = softmax_idx_from_real_val<typename data_T::value_type, CONFIG_T>(in_pack[j]);
+            unsigned x = softmax_idx_from_real_val<typename data_T::value_type, CONFIG_T::exp_table_size>(in_pack[j]);
             exp_res[j] = exp_table[x];
         }
 
         // Explicitly sum the results with an adder tree.
         // Rounding & Saturation mode, which improve accuracy, prevent Vivado from expression balancing
-        Op_add<typename CONFIG_T::exp_table_t> op_add;
-        exp_sum =
-            reduce<typename CONFIG_T::exp_table_t, data_T::size, Op_add<typename CONFIG_T::exp_table_t>>(exp_res, op_add);
+        Op_add<typename CONFIG_T::accum_t> op_add;
+        exp_sum = reduce<typename CONFIG_T::accum_t, data_T::size, Op_add<typename CONFIG_T::accum_t>>(exp_res, op_add);
 
         typename CONFIG_T::inv_table_t inv_exp_sum =
-            invert_table[softmax_idx_from_real_val<typename CONFIG_T::exp_table_t, CONFIG_T>(exp_sum)];
+            invert_table[softmax_idx_from_real_val<typename CONFIG_T::inv_inp_t, CONFIG_T::inv_table_size>(exp_sum)];
 
         res_T out_pack;
         PRAGMA_DATA_PACK(out_pack)
@@ -171,19 +170,19 @@ void softmax_stable(hls::stream<data_T> &data, hls::stream<res_T> &res) {
     // Initialize the lookup tables
 #ifdef __HLS_SYN__
     bool initialized = false;
-    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::table_size];
-    typename CONFIG_T::inv_table_t invert_table[CONFIG_T::table_size];
+    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
 #else
     static bool initialized = false;
-    static typename CONFIG_T::exp_table_t exp_table[CONFIG_T::table_size];
-    static typename CONFIG_T::inv_table_t invert_table[CONFIG_T::table_size];
+    static typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    static typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
 
 #endif
     if (!initialized) {
         // Note we are exponentiating the inputs, which have type data_T
-        init_exp_table<typename data_T::value_type, CONFIG_T>(exp_table);
+        init_exp_table<typename CONFIG_T::inp_norm_t, CONFIG_T>(exp_table, true);
         // Note we are inverting the exponentials, which have type exp_table_t
-        init_invert_table<typename CONFIG_T::exp_table_t, CONFIG_T>(invert_table);
+        init_invert_table<typename CONFIG_T::inv_inp_t, CONFIG_T>(invert_table);
         initialized = true;
     }
 
@@ -208,31 +207,29 @@ SoftmaxArrayLoop:
         typename data_T::value_type x_max =
             reduce<typename data_T::value_type, data_T::size, Op_max<typename data_T::value_type>>(data_array, op_max);
 
-        // For the diffs, use the same type as the input but force rounding and saturation
-        ap_fixed<data_T::value_type::width, data_T::value_type::iwidth, AP_RND, AP_SAT> d_xi_xmax[data_T::size];
+        typename CONFIG_T::inp_norm_t d_xi_xmax[data_T::size];
         for (unsigned j = 0; j < data_T::size; j++) {
             #pragma HLS UNROLL
-            d_xi_xmax[j] = data_array[j] - x_max;
+            d_xi_xmax[j] = x_max - data_array[j];
         }
 
         // Calculate all the e^x's
-        typename CONFIG_T::exp_table_t exp_res[data_T::size];
+        typename CONFIG_T::accum_t exp_res[data_T::size];
         #pragma HLS ARRAY_PARTITION variable=exp_res complete
-        typename CONFIG_T::exp_table_t exp_sum(0);
+        typename CONFIG_T::inv_inp_t exp_sum(0);
         for (unsigned j = 0; j < data_T::size; j++) {
             #pragma HLS UNROLL
-            unsigned x = softmax_idx_from_real_val<typename data_T::value_type, CONFIG_T>(d_xi_xmax[j]);
+            unsigned x = softmax_idx_from_real_val<typename CONFIG_T::inp_norm_t, CONFIG_T::exp_table_size>(d_xi_xmax[j]);
             exp_res[j] = exp_table[x];
         }
 
         // Explicitly sum the results with an adder tree.
         // Rounding & Saturation mode, which improve accuracy, prevent Vivado from expression balancing
-        Op_add<typename CONFIG_T::exp_table_t> op_add;
-        exp_sum =
-            reduce<typename CONFIG_T::exp_table_t, data_T::size, Op_add<typename CONFIG_T::exp_table_t>>(exp_res, op_add);
+        Op_add<typename CONFIG_T::accum_t> op_add;
+        exp_sum = reduce<typename CONFIG_T::accum_t, data_T::size, Op_add<typename CONFIG_T::accum_t>>(exp_res, op_add);
 
         typename CONFIG_T::inv_table_t inv_exp_sum =
-            invert_table[softmax_idx_from_real_val<typename CONFIG_T::exp_table_t, CONFIG_T>(exp_sum)];
+            invert_table[softmax_idx_from_real_val<typename CONFIG_T::inv_inp_t, CONFIG_T::inv_table_size>(exp_sum)];
 
         res_T out_pack;
         PRAGMA_DATA_PACK(out_pack)
@@ -413,6 +410,34 @@ TanHActLoop:
 }
 
 // *************************************************
+//       UnaryLUT Activation
+// *************************************************
+
+template <class data_T, class res_T, typename CONFIG_T>
+void unary_lut(hls::stream<data_T> &data, hls::stream<res_T> &res, typename CONFIG_T::table_t table[CONFIG_T::table_size]) {
+    #pragma HLS function_instantiate variable=table
+    #pragma HLS ARRAY_PARTITION variable=table complete
+
+UnaryLUTActLoop:
+    for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
+        #pragma HLS PIPELINE II=CONFIG_T::reuse_factor rewind
+
+        data_T in_data = data.read();
+        res_T out_data;
+        PRAGMA_DATA_PACK(out_data)
+
+    UnaryLUTPackLoop:
+        for (int j = 0; j < res_T::size; j++) {
+            #pragma HLS UNROLL
+            unsigned index = get_index_unary_lut<CONFIG_T::table_size>(in_data[j].V);
+            out_data[j] = table[index];
+        }
+
+        res.write(out_data);
+    }
+}
+
+// *************************************************
 //       Hard sigmoid Activation
 // *************************************************
 
@@ -471,8 +496,8 @@ HardSigmoidActLoop:
 //       Leaky RELU Activation
 // *************************************************
 
-template <class data_T, class res_T, typename CONFIG_T>
-void leaky_relu(hls::stream<data_T> &data, typename data_T::value_type alpha, hls::stream<res_T> &res) {
+template <class data_T, class param_T, class res_T, typename CONFIG_T>
+void leaky_relu(hls::stream<data_T> &data, param_T alpha, hls::stream<res_T> &res) {
 LeakyReLUActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         #pragma HLS PIPELINE
@@ -497,8 +522,8 @@ LeakyReLUActLoop:
 //       Thresholded RELU Activation
 // *************************************************
 
-template <class data_T, class res_T, typename CONFIG_T>
-void thresholded_relu(hls::stream<data_T> &data, typename data_T::value_type theta, hls::stream<res_T> &res) {
+template <class data_T, class param_T, class res_T, typename CONFIG_T>
+void thresholded_relu(hls::stream<data_T> &data, param_T theta, hls::stream<res_T> &res) {
 ThresholdedReLUActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         #pragma HLS PIPELINE
@@ -605,8 +630,8 @@ SoftsignActLoop:
 // *************************************************
 //       ELU Activation
 // *************************************************
-template <class data_T, class res_T, typename CONFIG_T>
-void elu(hls::stream<data_T> &data, typename data_T::value_type alpha, hls::stream<res_T> &res) {
+template <class data_T, class param_T, class res_T, typename CONFIG_T>
+void elu(hls::stream<data_T> &data, param_T alpha, hls::stream<res_T> &res) {
     // Initialize the lookup table
 #ifdef __HLS_SYN__
     bool initialized = false;
@@ -647,7 +672,7 @@ EluActLoop:
 }
 
 template <class data_T, class res_T, typename CONFIG_T> void elu(hls::stream<data_T> &data, hls::stream<res_T> &res) {
-    elu<data_T, res_T, CONFIG_T>(data, 1.0, res);
+    elu<data_T, ap_uint<1>, res_T, CONFIG_T>(data, 1.0, res);
 }
 
 // *************************************************
@@ -698,8 +723,8 @@ SeluActLoop:
 //       PReLU Activation
 // *************************************************
 
-template <class data_T, class res_T, typename CONFIG_T>
-void prelu(hls::stream<data_T> &data, typename data_T::value_type alpha[CONFIG_T::n_in], hls::stream<res_T> &res) {
+template <class data_T, class param_T, class res_T, typename CONFIG_T>
+void prelu(hls::stream<data_T> &data, const param_T alpha[CONFIG_T::n_in], hls::stream<res_T> &res) {
 PReLUActLoop:
     for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
         #pragma HLS PIPELINE

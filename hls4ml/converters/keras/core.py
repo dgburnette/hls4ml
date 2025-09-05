@@ -1,4 +1,6 @@
-from hls4ml.converters.keras_to_hls import get_weights_data, keras_handler, parse_default_keras_layer
+import math
+
+from hls4ml.converters.keras_v2_to_hls import get_weights_data, keras_handler, parse_default_keras_layer
 from hls4ml.model.quantizers import BinaryQuantizer, TernaryQuantizer
 from hls4ml.model.types import IntegerPrecisionType
 
@@ -62,8 +64,13 @@ def parse_activation_layer(keras_layer, input_names, input_shapes, data_reader):
 
     if layer['class_name'] != 'Activation':
         layer['activation'] = layer['class_name']
+
+    if layer['activation'] == 'elu':
+        layer['class_name'] = 'ELU'  # always use ELU type for elu, even if passed as activation
+
     if layer['class_name'] == 'LeakyReLU':
-        layer['activ_param'] = keras_layer['config'].get('alpha', 0.3)
+        # the name changes for version 3
+        layer['activ_param'] = keras_layer['config'].get('negative_slope', keras_layer['config'].get('alpha', 0.3))
     elif layer['class_name'] == 'ThresholdedReLU':
         layer['activ_param'] = keras_layer['config'].get('theta', 1.0)
     elif layer['class_name'] == 'ELU':
@@ -71,7 +78,9 @@ def parse_activation_layer(keras_layer, input_names, input_shapes, data_reader):
     elif layer['class_name'] == 'ReLU':
         layer['class_name'] = 'Activation'
     elif layer['class_name'] == 'PReLU':
-        layer['alpha_data'] = get_weights_data(data_reader, layer['name'], 'alpha')
+        if not keras_layer['config'].get('shared_axes') is None:
+            raise Exception('PReLU with shared_axes other than None is not supported in hsl4ml')
+        layer['param_data'] = get_weights_data(data_reader, layer['name'], 'alpha')
 
     if layer['class_name'] == 'Activation' and layer['activation'] == 'softmax':
         layer['class_name'] = 'Softmax'
@@ -79,6 +88,10 @@ def parse_activation_layer(keras_layer, input_names, input_shapes, data_reader):
         layer['class_name'] = 'HardActivation'
     if layer['class_name'] == 'Softmax':
         layer['axis'] = keras_layer['config'].get('axis', -1)
+    if layer['class_name'] == 'Activation' and layer['activation'] == 'leaky_relu':
+        layer['class_name'] = 'LeakyReLU'
+        # The parameter name changes for API v3; the default is different than in LeakyReLU layer
+        layer['activ_param'] = keras_layer['config'].get('negative_slope', keras_layer['config'].get('alpha', 0.2))
 
     return layer, [shape for shape in input_shapes[0]]
 
@@ -116,6 +129,40 @@ def parse_batchnorm_layer(keras_layer, input_names, input_shapes, data_reader):
     layer['mean_data'], layer['variance_data'] = get_weights_data(
         data_reader, layer['name'], ['moving_mean', 'moving_variance']
     )
+
+    return layer, [shape for shape in input_shapes[0]]
+
+
+@keras_handler('LayerNormalization')
+def parse_layernorm_layer(keras_layer, input_names, input_shapes, data_reader):
+    assert 'LayerNormalization' in keras_layer['class_name']
+
+    layer = parse_default_keras_layer(keras_layer, input_names)
+
+    in_size = 1
+    for dim in input_shapes[0][1:]:
+        in_size *= dim
+    layer['n_in'] = layer['n_out'] = in_size
+
+    if not ((len(input_shapes[0])) == 3):
+        raise Exception(
+            'input size is not currently supported by hls4ml; '
+            'only three-dimensional input (including batch dimension) is supported'
+        )
+    layer['seq_len'] = input_shapes[0][-2]
+
+    if not (keras_layer['config']['axis'][0] == 2):
+        raise Exception('assigning the axis is not currently supported by hls4ml; only axis 2 is supported')
+    layer['axis'] = keras_layer['config']['axis'][0]
+
+    layer['gamma_data'] = get_weights_data(data_reader, layer['name'], 'gamma')
+    layer['beta_data'] = get_weights_data(data_reader, layer['name'], 'beta')
+
+    if keras_layer['config']['epsilon'] <= 0:
+        raise Exception('epsilon must be positive')
+    layer['epsilon_power_of_10'] = -round(math.log10(keras_layer['config']['epsilon']))
+    if layer['epsilon_power_of_10'] <= 0:
+        raise Exception('epsilon must be less than 1e-1')
 
     return layer, [shape for shape in input_shapes[0]]
 

@@ -1,18 +1,21 @@
 import math
-import os
 import re
+import subprocess
 from bisect import bisect_left
 from collections.abc import Iterable
 
 import numpy as np
 
 from hls4ml.backends.backend import Backend
-from hls4ml.model.attributes import ChoiceAttribute, ConfigurableAttribute, TypeAttribute
+from hls4ml.model.attributes import Attribute, ChoiceAttribute, ConfigurableAttribute, TypeAttribute
 from hls4ml.model.layers import (
     GRU,
     LSTM,
     Activation,
     BatchNormalization,
+    BatchNormOnnx,
+    Bidirectional,
+    Conv,
     Conv1D,
     Conv2D,
     Dense,
@@ -22,8 +25,12 @@ from hls4ml.model.layers import (
     GarNetStack,
     GlobalPooling1D,
     GlobalPooling2D,
+    LayerNormalization,
+    MatMul,
+    Merge,
     Pooling1D,
     Pooling2D,
+    Quant,
     SeparableConv1D,
     SeparableConv2D,
     SimpleRNN,
@@ -33,13 +40,16 @@ from hls4ml.model.optimizer import model_optimizer
 from hls4ml.model.types import (
     ExponentPrecisionType,
     FixedPrecisionType,
+    FloatPrecisionType,
     IntegerPrecisionType,
     PrecisionType,
     RoundingMode,
     SaturationMode,
+    StandardFloatPrecisionType,
     UnspecifiedPrecisionType,
     XnorPrecisionType,
 )
+from hls4ml.utils import attribute_descriptions as descriptions
 from hls4ml.writer import get_writer
 
 
@@ -55,8 +65,6 @@ class FPGABackend(Backend):
             Dense,
             Conv1D,
             Conv2D,
-            SeparableConv1D,
-            SeparableConv2D,
             Pooling1D,
             Pooling2D,
             GlobalPooling1D,
@@ -64,41 +72,80 @@ class FPGABackend(Backend):
             SimpleRNN,
             LSTM,
             GRU,
+            Bidirectional,
             Dot,
+            Conv,
+            MatMul,
+            LayerNormalization,
         ]
 
         for layer in accum_layers:
             attrs = self.attribute_map.get(layer, [])
-            attrs.append(TypeAttribute('accum'))
+            attrs.append(TypeAttribute('accum', description=descriptions.accum_type))
             self.attribute_map[layer] = attrs
 
-        rf_layers = accum_layers + [BatchNormalization, Activation, Embedding, GarNet, GarNetStack]
+        rf_layers = accum_layers + [
+            BatchNormalization,
+            Activation,
+            Embedding,
+            GarNet,
+            GarNetStack,
+            Quant,
+            BatchNormOnnx,
+            Merge,
+        ]
 
         for layer in rf_layers:
             attrs = self.attribute_map.get(layer, [])
-            attrs.append(ConfigurableAttribute('reuse_factor', default=1))
+            attrs.append(ConfigurableAttribute('reuse_factor', default=1, description=descriptions.reuse_factor))
+            self.attribute_map[layer] = attrs
+
+        # separable is kind of special because it is effectively two layers that will be split
+        for layer in (SeparableConv1D, SeparableConv2D):
+            attrs = self.attribute_map.get(layer, [])
+            attrs.append(TypeAttribute('depthwise_accum'))
+            attrs.append(TypeAttribute('pointwise_accum'))
+            attrs.append(TypeAttribute('depthwise_result'))
+            attrs.append(ConfigurableAttribute('depthwise_reuse_factor', default=1))
+            attrs.append(ConfigurableAttribute('pointwise_reuse_factor', default=1))
             self.attribute_map[layer] = attrs
 
         act_attrs = self.attribute_map.get(Activation, [])
-        act_attrs.append(ConfigurableAttribute('table_size', default=1024))
-        act_attrs.append(TypeAttribute('table', default=FixedPrecisionType(18, 8)))
+        act_attrs.append(ConfigurableAttribute('table_size', default=1024, description=descriptions.table_size))
+        act_attrs.append(TypeAttribute('table', default=FixedPrecisionType(18, 8), description=descriptions.table_type))
         self.attribute_map[Activation] = act_attrs
 
-        softmax_attrs = self.attribute_map.get(Softmax, [])
-        softmax_attrs.append(ChoiceAttribute('implementation', ['latency', 'stable', 'argmax', 'legacy'], default='stable'))
-        softmax_attrs.append(ConfigurableAttribute('skip', value_type=bool, default=False))
-        softmax_attrs.append(
+        softmax_attrs = [
+            Attribute('n_in'),
+            Attribute('activation', value_type=str),
+            Attribute('n_outer', value_type=int, default=1),
+            Attribute('n_inner', value_type=int, default=1),
+            ChoiceAttribute(
+                'implementation',
+                ['latency', 'stable', 'argmax', 'legacy'],
+                default='stable',
+                description=descriptions.softmax_implementation,
+            ),
+            ConfigurableAttribute('skip', value_type=bool, default=False, description=descriptions.softmax_skip),
             TypeAttribute(
                 'exp_table',
                 default=FixedPrecisionType(18, 8, rounding_mode=RoundingMode.RND, saturation_mode=SaturationMode.SAT),
-            )
-        )
-        softmax_attrs.append(
+                description=descriptions.table_type,
+            ),
             TypeAttribute(
                 'inv_table',
                 default=FixedPrecisionType(18, 8, rounding_mode=RoundingMode.RND, saturation_mode=SaturationMode.SAT),
-            )
-        )
+                description=descriptions.table_type,
+            ),
+            TypeAttribute(
+                'inv_inp',
+                default=FixedPrecisionType(18, 8, rounding_mode=RoundingMode.RND, saturation_mode=SaturationMode.SAT),
+            ),
+            TypeAttribute(
+                'accum',
+                default=FixedPrecisionType(18, 8, rounding_mode=RoundingMode.RND, saturation_mode=SaturationMode.SAT),
+            ),
+        ]
         self.attribute_map[Softmax] = softmax_attrs
 
     def create_layer_class(self, layer_class):
@@ -107,8 +154,12 @@ class FPGABackend(Backend):
             if issubclass(layer_class, cls):
                 new_attrubutes.extend(attributes)
 
+        layer_cls_fqn = layer_class.__module__ + '.' + layer_class.__qualname__
+
         return type(
-            self.name + layer_class.__name__, (layer_class,), {'_expected_attributes': new_attrubutes, '_wrapped': True}
+            self.name + layer_class.__name__,
+            (layer_class,),
+            {'_expected_attributes': new_attrubutes, '_wrapped': layer_cls_fqn},
         )
 
     def compile(self, model):
@@ -123,19 +174,22 @@ class FPGABackend(Backend):
         Returns:
             string: Returns the name of the compiled library.
         """
-        curr_dir = os.getcwd()
-        os.chdir(model.config.get_output_dir())
 
         lib_name = None
-        try:
-            ret_val = os.system('bash build_lib.sh')
-            if ret_val != 0:
-                raise Exception(f'Failed to compile project "{model.config.get_project_name()}"')
-            lib_name = '{}/firmware/{}-{}.so'.format(
-                model.config.get_output_dir(), model.config.get_project_name(), model.config.get_config_value('Stamp')
-            )
-        finally:
-            os.chdir(curr_dir)
+        ret_val = subprocess.run(
+            ['./build_lib.sh'],
+            shell=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=model.config.get_output_dir(),
+        )
+        if ret_val.returncode != 0:
+            print(ret_val.stdout)
+            raise Exception(f'Failed to compile project "{model.config.get_project_name()}"')
+        lib_name = '{}/firmware/{}-{}.so'.format(
+            model.config.get_output_dir(), model.config.get_project_name(), model.config.get_config_value('Stamp')
+        )
 
         return lib_name
 
@@ -184,6 +238,16 @@ class FPGABackend(Backend):
             n_out_recr = n_out
             return n_in, n_out, n_in_recr, n_out_recr
 
+        if 'Bidirectional' in layer.class_name:
+            result = []
+            for d in ['forward', 'backward']:
+                n_in = layer.get_attr('n_in')
+                n_out = layer.get_attr(f'{d}_n_states') * 3
+                n_in_recr = layer.get_attr(f'{d}_n_states')
+                n_out_recr = n_out
+                result.append((n_in, n_out, n_in_recr, n_out_recr))
+            return result
+
         raise Exception(f'Cannot get mult size for layer {layer.name} ({layer.class_name})')
 
     def get_valid_reuse_factors(self, n_in, n_out):
@@ -227,10 +291,12 @@ class FPGABackend(Backend):
         else:
             return before
 
-    def set_closest_reuse_factor(self, layer, n_in, n_out, attribute='reuse_factor'):
+    def set_closest_reuse_factor(self, layer, n_in, n_out, attribute='reuse_factor', include_max_rf=True):
         assert attribute is not None, 'Reuse factor attribute cannot be None'
 
         valid_rf = self.get_valid_reuse_factors(n_in, n_out)
+        if not include_max_rf:
+            valid_rf.pop()
         chosen_rf = layer.get_attr(attribute)
         if chosen_rf not in valid_rf:
             closest_rf = self.get_closest_reuse_factor(valid_rf, chosen_rf)
@@ -298,10 +364,21 @@ class FPGABackend(Backend):
         if precision.lower() == 'auto':
             return cls._convert_auto_type(precision)
 
+        if precision in ['float', 'double', 'half', 'bfloat16'] or precision.startswith(
+            ('ap_float', 'ac_std_float', 'std_float')
+        ):
+            return cls._convert_standard_float_type(precision)
+
+        if precision.startswith('ac_float'):
+            return cls._convert_ac_float_type(precision)
+
         if precision.startswith('ac_'):
             return cls._convert_ac_type(precision)
-        else:
+
+        if precision.startswith(('ap_', 'fixed', 'ufixed', 'int', 'uint')):  # We parse AP notation even without 'ap_' prefix
             return cls._convert_ap_type(precision)
+
+        raise ValueError(f'Unsupported precision type: {precision}')
 
     @classmethod
     def _convert_ap_type(cls, precision):
@@ -370,6 +447,44 @@ class FPGABackend(Backend):
             return FixedPrecisionType(width, integer, signed, round_mode, sat_mode)
         elif 'int' in precision:
             return IntegerPrecisionType(width, signed)
+
+    @classmethod
+    def _convert_standard_float_type(cls, precision):
+        # Some default values
+        if precision == 'float':
+            return StandardFloatPrecisionType(width=32, exponent=8, use_cpp_type=True)
+        if precision == 'double':
+            return StandardFloatPrecisionType(width=64, exponent=11, use_cpp_type=True)
+        if precision == 'half':
+            return StandardFloatPrecisionType(width=16, exponent=5, use_cpp_type=True)
+        if precision == 'bfloat16':
+            return StandardFloatPrecisionType(width=16, exponent=8, use_cpp_type=True)
+
+        # If it is a float type, parse the width and exponent
+        bits = re.search('.+<(.+?)>', precision).group(1).split(',')
+        if len(bits) == 2:
+            width = int(bits[0])
+            exponent = int(bits[1])
+            return StandardFloatPrecisionType(width=width, exponent=exponent, use_cpp_type=False)
+        else:
+            raise ValueError(f'Invalid standard float precision format: {precision}')
+
+    @classmethod
+    def _convert_ac_float_type(cls, precision):
+        # If it is a float type, parse the width and exponent
+        bits = re.search('.+<(.+?)>', precision).group(1).split(',')
+        if len(bits) == 3 or len(bits) == 4:
+            mantissa = int(bits[0])
+            integer = int(bits[1])
+            exponent = int(bits[2])
+            width = mantissa + exponent
+            if len(bits) == 4:
+                round_mode = RoundingMode.from_string(bits[3])
+            else:
+                round_mode = None
+            return FloatPrecisionType(width=width, integer=integer, exponent=exponent, rounding_mode=round_mode)
+        else:
+            raise ValueError(f'Invalid ac_float precision format: {precision}')
 
     @classmethod
     def _convert_auto_type(cls, precision):
@@ -685,7 +800,7 @@ class FPGABackend(Backend):
 
         The HLS compiler produces suboptimal designs for a im2col algorithm implementation, so a trick we use is
         to generate a resulting a result of im2col transformation explicitly, instead of relying on loops. Since
-        the result depends on the paraleters of the convolution layer (the input size, the kernel size, stride etc),
+        the result depends on the parameters of the convolution layer (the input size, the kernel size, stride etc),
         we need to do this for every convolution layer.
 
         Args:
@@ -714,7 +829,7 @@ class FPGABackend(Backend):
 
         generated_code = (
             "template<class data_T, typename CONFIG_T>\n"
-            "class fill_buffer_{index} : public FillConv1DBuffer<data_T, CONFIG_T> {{\n"
+            "class fill_buffer_{index} : public nnet::FillConv1DBuffer<data_T, CONFIG_T> {{\n"
             "    public:\n"
             "    static void fill_buffer(\n"
             "        data_T data[CONFIG_T::in_width * CONFIG_T::n_chan],\n"
@@ -782,7 +897,7 @@ class FPGABackend(Backend):
 
         The HLS compiler produces suboptimal designs for a im2col algorithm implementation, so a trick we use is
         to generate a resulting a result of im2col transformation explicitly, instead of relying on loops. Since
-        the result depends on the paraleters of the convolution layer (the input size, the kernel size, stride etc),
+        the result depends on the parameters of the convolution layer (the input size, the kernel size, stride etc),
         we need to do this for every convolution layer.
 
         Args:
@@ -844,7 +959,7 @@ class FPGABackend(Backend):
 
         generated_code = (
             "template<class data_T, typename CONFIG_T>\n"
-            "class fill_buffer_{index} : public FillConv2DBuffer<data_T, CONFIG_T> {{\n"
+            "class fill_buffer_{index} : public nnet::FillConv2DBuffer<data_T, CONFIG_T> {{\n"
             "    public:\n"
             "    static void fill_buffer(\n"
             "        data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan],\n"

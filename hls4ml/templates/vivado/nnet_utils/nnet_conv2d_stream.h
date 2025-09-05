@@ -53,7 +53,8 @@ ReadInputHeight:
     ReadInputWidth:
         for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width / (data_T::size / CONFIG_T::n_chan); i_iw++) {
             #pragma HLS LOOP_FLATTEN
-            if (CONFIG_T::strategy == nnet::latency && data_T::size / CONFIG_T::n_chan == 1) {
+            if ((CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) &&
+                data_T::size / CONFIG_T::n_chan == 1) {
                 #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
             }
             compute_scaled_indices_2d<data_T, CONFIG_T>(i_ih, i_iw, pixel_idx);
@@ -75,12 +76,17 @@ void conv_2d_buffer_cl(
                                                                                     [CONFIG_T::n_chan];
     #pragma HLS ARRAY_PARTITION variable = line_buffer complete dim = 2
 
+    if (CONFIG_T::strategy == nnet::resource_unrolled && CONFIG_T::reuse_factor > 1) {
+        #pragma HLS allocation instances=compute_output_buffer_1d limit=1 function
+        #pragma HLS allocation instances=compute_output_buffer_2d limit=1 function
+    }
+
 ReadInputHeight:
     for (unsigned i_ih = 0; i_ih < CONFIG_T::in_height; i_ih++) {
     ReadInputWidth:
         for (unsigned i_iw = 0; i_iw < CONFIG_T::in_width; i_iw++) {
             #pragma HLS LOOP_FLATTEN
-            if (CONFIG_T::strategy == nnet::latency) {
+            if (CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) {
                 #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
             }
             if (CONFIG_T::filt_height > 1) {

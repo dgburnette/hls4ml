@@ -13,12 +13,11 @@ from hls4ml.model.graph import ModelGraph
 from hls4ml.model.layers import GRU, LSTM, SeparableConv1D, SeparableConv2D
 
 try:
-    import qkeras
-    from tensorflow import keras
+    import keras
 
-    __tf_profiling_enabled__ = True
+    __keras_profiling_enabled__ = True
 except ImportError:
-    __tf_profiling_enabled__ = False
+    __keras_profiling_enabled__ = False
 
 try:
     import torch
@@ -26,6 +25,19 @@ try:
     __torch_profiling_enabled__ = True
 except ImportError:
     __torch_profiling_enabled__ = False
+
+try:
+    import qkeras
+
+    __qkeras_profiling_enabled__ = True
+except ImportError:
+    __qkeras_profiling_enabled__ = False
+
+__keras_activations = list()
+if __keras_profiling_enabled__:
+    __keras_activations.append(keras.layers.Activation)
+if __qkeras_profiling_enabled__:
+    __keras_activations.append(qkeras.QActivation)
 
 
 def get_unoptimized_hlsmodel(model):
@@ -72,6 +84,10 @@ def boxplot(data, fmt='longform'):
         if hue is not None:
             vp.get_legend().remove()
         vp.set_xscale('log', base=2)
+        plt.gca().axvline(
+            x=1, color='gray', linestyle='--', linewidth=1, zorder=0, label='x = 1'
+        )  # Add vertical line for 1 (2^0) behind the boxes
+        plt.legend()
         return f
     elif fmt == 'summary':
         from matplotlib.patches import Rectangle
@@ -80,6 +96,9 @@ def boxplot(data, fmt='longform'):
         f, ax = plt.subplots(1, 1)
         data.reverse()
         colors = sb.color_palette("Blues", len(data))
+        ax.axvline(
+            x=1, color='gray', linestyle='--', linewidth=1, zorder=0, label='x = 1'
+        )  # Add vertical line for 1 (2^0) behind the boxes
         bp = ax.bxp(data, showfliers=False, vert=False, medianprops=medianprops)
         # add colored boxes
         for line, color in zip(bp['boxes'], colors):
@@ -92,6 +111,7 @@ def boxplot(data, fmt='longform'):
         ax.set_yticklabels([d['weight'] for d in data])
         ax.set_xscale('log', base=2)
         plt.xlabel('x')
+        plt.legend()
         return f
     else:
         return None
@@ -273,6 +293,18 @@ def _keras_layer(layer):
     return layer.get_weights(), ['w', 'b']
 
 
+def _keras_layernorm(layer):
+    weights = layer.get_weights()
+
+    gamma = weights[0]
+    beta = weights[1]
+
+    scale = gamma
+    bias = beta
+
+    return [scale, bias], ['s', 'b']
+
+
 def _keras_lstm(layer):
     return layer.get_weights(), ['w', 'u', 'b']
 
@@ -282,6 +314,7 @@ keras_process_layer_map = defaultdict(
     {
         'BatchNormalization': _keras_batchnorm,
         'QBatchNormalization': _keras_batchnorm,
+        'LayerNormalization': _keras_layernorm,
         'LSTM': _keras_lstm,
         'QLSTM': _keras_lstm,
     },
@@ -381,36 +414,10 @@ def activations_keras(model, X, fmt='longform', plot='boxplot'):
 
 
 def weights_torch(model, fmt='longform', plot='boxplot'):
-    suffix = ['w', 'b']
-    if fmt == 'longform':
-        data = {'x': [], 'layer': [], 'weight': []}
-    elif fmt == 'summary':
-        data = []
-    for layer in model.children():
-        if isinstance(layer, torch.nn.Linear):
-            name = layer.__class__.__name__
-            weights = list(layer.parameters())
-            for i, w in enumerate(weights):
-                label = f'{name}/{suffix[i]}'
-                w = weights[i].detach().numpy()
-                w = w.flatten()
-                w = abs(w[w != 0])
-                n = len(w)
-                if n == 0:
-                    print(f'Weights for {name} are only zeros, ignoring.')
-                    break
-                if fmt == 'longform':
-                    data['x'].extend(w.tolist())
-                    data['layer'].extend([name] * n)
-                    data['weight'].extend([label] * n)
-                elif fmt == 'summary':
-                    data.append(array_to_summary(w, fmt=plot))
-                    data[-1]['layer'] = name
-                    data[-1]['weight'] = label
+    from hls4ml.utils.profiling_utils import WeightsTorch
 
-    if fmt == 'longform':
-        data = pandas.DataFrame(data)
-    return data
+    wt = WeightsTorch(model, fmt, plot)
+    return wt.get_weights()
 
 
 def activations_torch(model, X, fmt='longform', plot='boxplot'):
@@ -481,14 +488,15 @@ def numerical(model=None, hls_model=None, X=None, plot='boxplot'):
 
     if hls_model_present:
         data = weights_hlsmodel(hls_model_unoptimized, fmt='summary', plot=plot)
+        print(data)
     elif model_present:
-        if __tf_profiling_enabled__ and isinstance(model, keras.Model):
+        if __keras_profiling_enabled__ and isinstance(model, keras.Model):
             data = weights_keras(model, fmt='summary', plot=plot)
-        elif __torch_profiling_enabled__ and isinstance(model, torch.nn.Sequential):
+        elif __torch_profiling_enabled__ and isinstance(model, torch.nn.Module):
             data = weights_torch(model, fmt='summary', plot=plot)
 
     if data is None:
-        print("Only keras, PyTorch (Sequential) and ModelGraph models " + "can currently be profiled")
+        print("Only keras, PyTorch and ModelGraph models " + "can currently be profiled")
 
         if hls_model_present and os.path.exists(tmp_output_dir):
             shutil.rmtree(tmp_output_dir)
@@ -520,7 +528,7 @@ def numerical(model=None, hls_model=None, X=None, plot='boxplot'):
     if X is not None:
         print("Profiling activations" + before)
         data = None
-        if __tf_profiling_enabled__ and isinstance(model, keras.Model):
+        if __keras_profiling_enabled__ and isinstance(model, keras.Model):
             data = activations_keras(model, X, fmt='summary', plot=plot)
         elif __torch_profiling_enabled__ and isinstance(model, torch.nn.Sequential):
             data = activations_torch(model, X, fmt='summary', plot=plot)
@@ -591,7 +599,7 @@ def get_ymodel_keras(keras_model, X):
             hasattr(layer, 'activation')
             and hasattr(layer.activation, "__name__")
             and layer.activation is not None
-            and not isinstance(layer, (keras.layers.Activation, qkeras.qlayers.QActivation))
+            and not isinstance(layer, tuple(__keras_activations))
             and layer.activation.__name__ != 'linear'
         ):
             tmp_activation = layer.activation

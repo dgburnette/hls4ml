@@ -5,13 +5,19 @@ behave like simple wrappers.
 """
 
 import numpy as np
-import tensorflow as tf
-from qkeras.quantizers import get_quantizer
 
-from hls4ml.model.types import ExponentPrecisionType, FixedPrecisionType, IntegerPrecisionType, XnorPrecisionType
+from hls4ml.model.types import (
+    ExponentPrecisionType,
+    FixedPrecisionType,
+    IntegerPrecisionType,
+    RoundingMode,
+    SaturationMode,
+    Serializable,
+    XnorPrecisionType,
+)
 
 
-class Quantizer:
+class Quantizer(Serializable):
     """
     Base class for representing quantizers in hls4ml.
 
@@ -28,6 +34,13 @@ class Quantizer:
 
     def __call__(self, data):
         raise NotImplementedError
+
+    def serialize_state(self):
+        state = {
+            'bits': self.bits,
+            'hls_type': self.hls_type.serialize(),
+        }
+        return state
 
 
 class BinaryQuantizer(Quantizer):
@@ -59,6 +72,12 @@ class BinaryQuantizer(Quantizer):
             quant_data = np.where(data > 0, ones, -ones)
         return quant_data
 
+    def serialize_state(self):
+        state = {
+            'bits': self.bits,
+        }
+        return state
+
 
 class TernaryQuantizer(Quantizer):
     """Quantizer that quantizes to -1, 0 and 1."""
@@ -71,6 +90,10 @@ class TernaryQuantizer(Quantizer):
         ones = np.ones_like(data)
         return np.where(data > 0.5, ones, np.where(data <= -0.5, -ones, zeros))
 
+    def serialize_state(self):
+        state = {}
+        return state
+
 
 class QKerasQuantizer(Quantizer):
     """Wrapper around QKeras quantizers.
@@ -80,6 +103,9 @@ class QKerasQuantizer(Quantizer):
     """
 
     def __init__(self, config):
+        from qkeras.quantizers import get_quantizer
+
+        self.qkeras_config = config
         self.quantizer_fn = get_quantizer(config)
         self.alpha = config['config'].get('alpha', None)
         if config['class_name'] == 'quantized_bits':
@@ -99,8 +125,8 @@ class QKerasQuantizer(Quantizer):
             self.hls_type = FixedPrecisionType(width=16, integer=6, signed=True)
 
     def __call__(self, data):
-        tf_data = tf.convert_to_tensor(data)
-        return self.quantizer_fn(tf_data).numpy()
+        data = np.array(data, dtype='float32')
+        return self.quantizer_fn(data).numpy()
         # return self.quantizer_fn(data)
 
     def _get_type(self, quantizer_config):
@@ -116,6 +142,12 @@ class QKerasQuantizer(Quantizer):
         else:
             return FixedPrecisionType(width=width, integer=integer + 1, signed=True)
 
+    def serialize_state(self):
+        state = {
+            'config': self.qkeras_config,
+        }
+        return state
+
 
 class QKerasBinaryQuantizer(Quantizer):
     """Wrapper around QKeras binary quantizer.
@@ -125,6 +157,9 @@ class QKerasBinaryQuantizer(Quantizer):
     """
 
     def __init__(self, config, xnor=False):
+        from qkeras.quantizers import get_quantizer
+
+        self.qkeras_config = config
         self.bits = 1 if xnor else 2
         self.hls_type = XnorPrecisionType() if xnor else IntegerPrecisionType(width=2, signed=True)
         self.alpha = config['config']['alpha']
@@ -134,9 +169,13 @@ class QKerasBinaryQuantizer(Quantizer):
         self.binary_quantizer = BinaryQuantizer(1) if xnor else BinaryQuantizer(2)
 
     def __call__(self, data):
-        x = tf.convert_to_tensor(data)
-        y = self.quantizer_fn(x).numpy()
+        data = np.array(data, dtype='float32')
+        y = self.quantizer_fn(data).numpy()
         return self.binary_quantizer(y)
+
+    def serialize_state(self):
+        state = {'config': self.qkeras_config, 'xnor': True if self.bits == 1 else False}
+        return state
 
 
 class QKerasPO2Quantizer(Quantizer):
@@ -147,14 +186,124 @@ class QKerasPO2Quantizer(Quantizer):
     """
 
     def __init__(self, config):
+        from qkeras.quantizers import get_quantizer
+
+        self.qkeras_config = config
         self.bits = config['config']['bits']
         self.quantizer_fn = get_quantizer(config)
         self.hls_type = ExponentPrecisionType(width=self.bits, signed=True)
 
     def __call__(self, data):
         # Weights are quantized to nearest power of two
-        x = tf.convert_to_tensor(data)
-        y = self.quantizer_fn(x)
+        data = np.array(data, dtype='float32')
+        y = self.quantizer_fn(data)
         if hasattr(y, 'numpy'):
             y = y.numpy()
         return y
+
+    def serialize_state(self):
+        state = {
+            'config': self.qkeras_config,
+        }
+        return state
+
+
+class QuantNodeQuantizer(Quantizer):
+    """
+    This implements a quantizer for a FixedPrecisionType with width==integer
+
+    This is based on the sample implementation in finn-base
+    """
+
+    def __init__(self, precision):
+        super().__init__(precision.width, precision)
+        if not isinstance(precision, (FixedPrecisionType, IntegerPrecisionType)):
+            raise TypeError('QuantNodeQuantizer is only defined for FixedPrecisionType and IntegerPrecisionType')
+
+    def __call__(self, data):
+        """Apply the quantization on the data"""
+
+        scale = 2 ** (self.hls_type.width - self.hls_type.integer)
+
+        data = data * scale  # (not using *= to avoid modifying data)
+        # Clamping
+        min_int_val = self._min_int(self.hls_type.signed, self.hls_type.saturation_mode, self.bits)
+        max_int_val = self._max_int(self.hls_type.signed, self.bits)
+        data = np.where(data > max_int_val, max_int_val, data)
+        data = np.where(data < min_int_val, min_int_val, data)
+        # Rounding
+        rounding_fx = self._resolve_rounding_mode(self.hls_type.rounding_mode)
+        return rounding_fx(data) / scale
+
+    @staticmethod
+    def _min_int(signed: bool, saturation_mode: str, bit_width: int) -> int:
+        """Compute the minimum integer representable by a given number of bits.
+        Args:
+            signed (bool): Indicates whether the represented integer is signed or not.
+            saturation_mode (bool): Indicates the saturation mode used (AP_SAT_SYM or AP_SAT)
+            bit_width (int): Number of bits available for the representation.
+        Returns:
+            int: Maximum unsigned integer that can be represented according to
+            the input arguments.
+        Examples:
+            >>> min_int(signed=True, saturation_mode='AP_SAT_SYM', bit_width=8)
+            int(-127)
+            >>> min_int(signed=False, saturation_mode='AP_SAT_SYM', bit_width=8)
+            int(0)
+            >>> min_int(signed=True, saturation_mode='AP_SAT', bit_width=8)
+            int(-128)
+            >>> min_int(signed=False, saturation_mode='AP_SAT_SYM', bit_width=8)
+            int(0)
+        """
+        if saturation_mode not in (SaturationMode.SAT_SYM, SaturationMode.SAT, SaturationMode.WRAP):
+            raise ValueError(
+                f'Saturation mode {saturation_mode} not supported. Only AP_SAT_SYM, AP_SAT supported, WRAP partially'
+            )
+        if signed and saturation_mode == SaturationMode.SAT_SYM:
+            value = -(2 ** (bit_width - 1)) + 1
+        elif signed:
+            value = -(2 ** (bit_width - 1))
+        else:
+            value = 0
+        return value
+
+    @staticmethod
+    def _max_int(signed: bool, bit_width: int) -> int:
+        """Compute the maximum integer representable by a given number of bits.
+        (Note, narrow and unsigned is not supported by the implementation, so saturation mode is not used)
+        Args:
+            signed (bool): Indicates whether the represented integer is signed or not.
+            bit_width (int): Number of bits available for the representation.
+        Returns:
+            Tensor: Maximum integer that can be represented according to
+            the input arguments.
+        Examples:
+            >>> max_int(signed=True, bit_width=8)
+            int(127)
+            >>> max_int(signed=False, bit_width=8)
+            int(255)
+        """
+        if not signed:
+            value = (2**bit_width) - 1
+        else:
+            value = (2 ** (bit_width - 1)) - 1
+        return value
+
+    @staticmethod
+    def _resolve_rounding_mode(mode):
+        """Resolve the rounding mode  of Quant and Trunc ops
+        to the corresponding numpy functions."""
+        if mode == RoundingMode.RND_CONV:
+            return np.round
+        # elif mode_string == 'CEIL':   # not supported
+        #     return np.ceil
+        elif mode == RoundingMode.TRN:
+            return np.floor
+        else:
+            raise ValueError(f'Rounding mode {mode} not supported.')
+
+    def serialize_state(self):
+        state = {
+            'precision': self.hls_type.serialize(),
+        }
+        return state

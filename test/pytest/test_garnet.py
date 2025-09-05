@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 
 import hls4ml
-from contrib.garnet import GarNet, GarNetStack
+from hls4ml.contrib.garnet import GarNet, GarNetStack
 
 test_root_path = Path(__file__).parent
 
@@ -33,7 +33,7 @@ def garnet_models():
     model = Model(inputs=inputs, outputs=outputs)
     model.summary()
 
-    config = hls4ml.utils.config_from_keras_model(model, granularity='name')
+    config = hls4ml.utils.config_from_keras_model(model, granularity='name', backend='Vivado')
     config['Model'] = {}
     config['Model']['ReuseFactor'] = 1
     config['Model']['Strategy'] = 'Latency'
@@ -44,7 +44,7 @@ def garnet_models():
     cfg['HLSConfig'] = config
     cfg['KerasModel'] = model
 
-    hls_model = hls4ml.converters.keras_to_hls(cfg)
+    hls_model = hls4ml.converters.keras_v2_to_hls(cfg)
     hls_model.compile()
     return model, hls_model
 
@@ -68,7 +68,7 @@ def garnet_stack_models():
     model = Model(inputs=inputs, outputs=outputs)
     model.summary()
 
-    config = hls4ml.utils.config_from_keras_model(model, granularity='name')
+    config = hls4ml.utils.config_from_keras_model(model, granularity='name', backend='Vivado')
     config['Model'] = {}
     config['Model']['ReuseFactor'] = 1
     config['Model']['Strategy'] = 'Latency'
@@ -78,7 +78,7 @@ def garnet_stack_models():
     cfg['HLSConfig'] = config
     cfg['KerasModel'] = model
 
-    hls_model = hls4ml.converters.keras_to_hls(cfg)
+    hls_model = hls4ml.converters.keras_v2_to_hls(cfg)
     hls_model.compile()
     return model, hls_model
 

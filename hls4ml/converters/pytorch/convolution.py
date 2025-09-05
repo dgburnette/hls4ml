@@ -20,7 +20,7 @@ def parse_conv1d_layer(operation, layer_name, input_names, input_shapes, node, c
         layer['bias_data'] = None
 
     # Input info
-    (layer['in_width'], layer['n_chan']) = parse_data_format(
+    (*_, layer['in_width'], layer['n_chan']) = parse_data_format(
         input_shapes[0], 'channels_first'
     )  # Keras's default is channels_last
 
@@ -34,11 +34,6 @@ def parse_conv1d_layer(operation, layer_name, input_names, input_shapes, node, c
         padding = class_object.padding[0]
     else:
         padding = class_object.padding
-
-    if padding == 0:  # No padding, i.e., 'VALID' padding in Keras/Tensorflow
-        layer['padding'] = 'valid'
-    else:  # Only 'valid' and 'same' padding are available in Keras
-        layer['padding'] = 'same'
 
     # Ouput info
     (layer['out_width'], pad_left, pad_right) = compute_padding_1d_pytorch(
@@ -70,7 +65,7 @@ def parse_conv2d_layer(operation, layer_name, input_names, input_shapes, node, c
         layer['bias_data'] = None
 
     # Input info
-    (layer['in_height'], layer['in_width'], layer['n_chan']) = parse_data_format(
+    (*_, layer['in_height'], layer['in_width'], layer['n_chan']) = parse_data_format(
         input_shapes[0], 'channels_first'
     )  # Keras's default is channels_last
 
@@ -83,11 +78,6 @@ def parse_conv2d_layer(operation, layer_name, input_names, input_shapes, node, c
     layer['dilation'] = class_object.dilation[0]
     layer['pad_top'] = layer['pad_bottom'] = class_object.padding[0]
     layer['pad_left'] = layer['pad_right'] = class_object.padding[1]
-
-    if all(x == 0 for x in class_object.padding):  # No padding, i.e., 'VALID' padding in Keras/Tensorflow
-        layer['padding'] = 'valid'
-    else:  # Only 'valid' and 'same' padding are available in Keras
-        layer['padding'] = 'same'
 
     # Ouput info
     (layer['out_height'], layer['out_width'], _, _, _, _) = compute_padding_2d_pytorch(
