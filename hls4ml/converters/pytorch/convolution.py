@@ -78,7 +78,6 @@ def parse_conv2d_layer(operation, layer_name, input_names, input_shapes, node, c
     layer['dilation'] = class_object.dilation[0]
     layer['pad_top'] = layer['pad_bottom'] = class_object.padding[0]
     layer['pad_left'] = layer['pad_right'] = class_object.padding[1]
-    layer['padding_type'] = "valid" if layer['pad_top'] == 0 and layer['pad_left'] == 0 else "same" 
 
     # Ouput info
     (layer['out_height'], layer['out_width'], _, _, _, _) = compute_padding_2d_pytorch(

@@ -2,7 +2,6 @@ from hls4ml.converters.keras.convolution import parse_conv1d_layer, parse_conv2d
 from hls4ml.converters.keras.core import parse_batchnorm_layer, parse_dense_layer
 from hls4ml.converters.keras.recurrent import parse_rnn_layer
 from hls4ml.converters.keras_v2_to_hls import keras_handler, parse_default_keras_layer
-from hls4ml.converters.utils import parse_data_format
 from hls4ml.model.quantizers import QKerasBinaryQuantizer, QKerasPO2Quantizer, QKerasQuantizer
 from hls4ml.model.types import FixedPrecisionType
 
@@ -185,12 +184,6 @@ def parse_qactivation_layer(keras_layer, input_names, input_shapes, data_reader)
     assert keras_layer['class_name'] == 'QActivation'
 
     layer = get_activation_quantizer(keras_layer, input_names)
-    shape = parse_data_format(input_shapes[0], layer['data_format'])
-    if shape is not None:
-        if len(shape) == 3:
-            (layer['in_height'], layer['in_width'], layer['n_chan']) = shape
-        elif len(shape) == 2:
-            (layer['in_width'], layer['n_chan']) = shape
 
     return layer, [shape for shape in input_shapes[0]]
 

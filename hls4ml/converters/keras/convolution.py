@@ -50,7 +50,6 @@ def parse_conv2d_layer(keras_layer, input_names, input_shapes, data_reader):
     layer = parse_default_keras_layer(keras_layer, input_names)
 
     (*_, layer['in_height'], layer['in_width'], layer['n_chan']) = parse_data_format(input_shapes[0], layer['data_format'])
-    layer['padding_type'] = keras_layer['config']['padding']
 
     if layer['class_name'] in ['Conv2D', 'QConv2D', 'QConv2DBatchnorm']:
         layer['weight_data'] = get_weights_data(data_reader, layer['name'], 'kernel')
