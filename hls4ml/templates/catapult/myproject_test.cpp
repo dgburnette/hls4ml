@@ -13,7 +13,10 @@ static std::string s_weights_dir;
 const char *get_weights_dir() { return s_weights_dir.c_str(); }
 
 #include "firmware/myproject.h"
+#include <ac_shared.h>
+#include <ac_sync.h>
 #include "nnet_utils/nnet_helpers.h"
+// hls-fpga-machine-learning insert catapult_scverify
 // #include "firmware/parameters.h"
 
 #include <mc_scverify.h>
@@ -35,13 +38,16 @@ size_t trace_type_size = sizeof(double);
 } // namespace nnet
 
 CCS_MAIN(int argc, char *argv[]) {
-    if (argc < 2) {
+    if ((argc < 2) || (argc == 3)) {
         std::cerr << "Error - too few arguments" << std::endl;
-        std::cerr << "Usage: " << argv[0] << " <weights_dir> <tb_input_features> <tb_output_predictions>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <weights_dir> <tb_input_features> <tb_output_predictions> <threshold>"
+                  << std::endl;
         std::cerr << "Where: <weights_dir>           - string pathname to directory containing wN.txt and bN.txt files"
                   << std::endl;
         std::cerr << "       <tb_input_features>     - string pathname to tb_input_features.dat (optional)" << std::endl;
         std::cerr << "       <tb_output_predictions> - string pathname to tb_output_predictions.dat (optional)" << std::endl;
+        std::cerr << "       <threshold>             - Python vs C++ prediction comparison threshold." << std::endl;
+        std::cerr << "                                 Set to 0.0 to disable. (optional)" << std::endl;
         std::cerr << std::endl;
         std::cerr << "If no testbench input/prediction data provided, random input data will be generated" << std::endl;
         CCS_RETURN(-1);
@@ -51,13 +57,14 @@ CCS_MAIN(int argc, char *argv[]) {
 
     std::string tb_in;
     std::string tb_out;
+    float threshold = 0.0;
     std::ifstream fin;
     std::ifstream fpr;
     bool use_random = false;
     if (argc == 2) {
         std::cout << "No testbench files provided - Using random input data" << std::endl;
         use_random = true;
-    } else {
+    } else if (argc > 3) {
         tb_in = argv[2];
         tb_out = argv[3];
         std::cout << "  Test Feature Data: " << tb_in << std::endl;
@@ -70,6 +77,9 @@ CCS_MAIN(int argc, char *argv[]) {
         if (!fin.is_open() || !fpr.is_open()) {
             use_random = true;
         }
+    }
+    if (argc == 5) {
+        threshold = atof(argv[4]);
     }
 
 #ifdef RTL_SIM
@@ -89,6 +99,11 @@ CCS_MAIN(int argc, char *argv[]) {
     std::string iline;
     std::string pline;
     int e = 0;
+    unsigned int total_err_cnt = 0;
+    (void)total_err_cnt; // to prevent unused-variable warnings when tb feature is not enabled
+    (void)threshold; // to prevent unused-variable warnings when tb feature is not enabled
+
+    // hls-fpga-machine-learning insert reload_channel
 
     if (!use_random) {
         while (std::getline(fin, iline) && std::getline(fpr, pline)) {
@@ -96,14 +111,14 @@ CCS_MAIN(int argc, char *argv[]) {
                 std::cout << "Processing input " << e << std::endl;
             char *cstr = const_cast<char *>(iline.c_str());
             char *current;
-            std::vector<float> in;
+            std::vector<float> in; // variable's name must be 'in' to work with inserted code below
             current = strtok(cstr, " ");
             while (current != NULL) {
                 in.push_back(atof(current));
                 current = strtok(NULL, " ");
             }
             cstr = const_cast<char *>(pline.c_str());
-            std::vector<float> pr;
+            std::vector<float> pr; // variable's name must be 'pr' to work with inserted code below
             current = strtok(cstr, " ");
             while (current != NULL) {
                 pr.push_back(atof(current));
@@ -115,6 +130,10 @@ CCS_MAIN(int argc, char *argv[]) {
             // hls-fpga-machine-learning insert data
 
             // hls-fpga-machine-learning insert top-level-function
+
+            if (threshold > 0.0) {
+                // hls-fpga-machine-learning insert output-compare
+            }
 
             if (e % CHECKPOINT == 0) {
                 std::cout << "Predictions" << std::endl;
@@ -137,7 +156,7 @@ CCS_MAIN(int argc, char *argv[]) {
         std::cout << "Number of Frames Passed from the tcl= " << RANDOM_FRAMES << std::endl;
 
         if (RANDOM_FRAMES > 0) {
-            for (unsigned int k = 0; k < RANDOM_FRAMES; k++) {
+            for (unsigned int k = 0; k < RANDOM_FRAMES-1; k++) {
                 // hls-fpga-machine-learning insert random
 
                 // hls-fpga-machine-learning insert top-level-function
@@ -160,5 +179,16 @@ CCS_MAIN(int argc, char *argv[]) {
     fout.close();
     std::cout << "INFO: Saved inference results to file: " << RESULTS_LOG << std::endl;
 
-    return 0;
+    if (!use_random) {
+        if (total_err_cnt) {
+            std::cerr << "Error: A total of " << total_err_cnt
+                      << " differences detected between golden Python prediction and C++ prediction using threshold of "
+                      << threshold << std::endl;
+        } else {
+            if (threshold > 0.0) {
+                std::cout << "Python predictions and C++ predictions are within threshold of " << threshold << std::endl;
+            }
+        }
+    }
+    return total_err_cnt;
 }

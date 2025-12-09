@@ -1,7 +1,6 @@
 import os
 import re
-
-import yaml
+import pandas as pd
 
 
 def read_catapult_report(hls_dir, full_report=False):
@@ -128,23 +127,15 @@ def _get_abs_and_percentage_values(unparsed_cell):
     return int(unparsed_cell.split('(')[0]), float(unparsed_cell.split('(')[1].replace('%', '').replace(')', ''))
 
 
-def parse_catapult_report(output_dir):
+def parse_catapult_report(output_dir, ProjectName, project_dir=None):
     if not os.path.exists(output_dir):
         print(f'Project OutputDir {output_dir} does not exist. Exiting.')
         return
 
-    # Read the YAML config file to determine the project settings
-    with open(output_dir + '/hls4ml_config.yml') as yfile:
-        ydata = yaml.safe_load(yfile)
-
-    ProjectName = ydata['ProjectName']
-    try:
-        ProjectDir = ydata['ProjectDir']
-    except KeyError:
+    if project_dir is None:
         ProjectDir = ProjectName + '_prj'
-
-    if ProjectDir is None:
-        ProjectDir = ProjectName + '_prj'
+    else:
+        ProjectDir = project_dir
 
     sln_dir = output_dir + '/' + ProjectDir
     if not os.path.exists(sln_dir):
@@ -215,17 +206,16 @@ def parse_catapult_report(output_dir):
 
     latest_prj_dir = get_latest_project_prj_directory(output_dir, ProjectDir)
     latest_ver_dir = get_latest_project_version_directory(latest_prj_dir, ProjectName)
-    file_path = os.path.join(latest_ver_dir, 'nnet_layer_results.txt')
-    print('Results in nnet_layer_results.txt from:', file_path)
+    file_path = os.path.join(latest_ver_dir, 'nnet_layer_results.csv')
+    if os.path.isfile(file_path):
+        report['PerLayerQofR'] = pd.read_csv(file_path,delimiter=';')
 
-    # Initialize the array
-    report['PerLayerQOFR'] = []
-    # Open the file and read its contents
-    with open(file_path) as file:
-        # Read each line and append it to the list
-        for line in file:
-            report['PerLayerQOFR'].append(line.strip())  # strip() removes leading/trailing
-
+    file_path = os.path.join(latest_ver_dir, 'nnet_qofr.csv')
+    if os.path.isfile(file_path):
+        nnet_qofr = pd.read_csv(file_path,delimiter=',')
+        report['NNET_QofR'] = nnet_qofr
+    else:
+        report['NNET_QofR'] = ''
     return report
 
 

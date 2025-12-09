@@ -1,8 +1,7 @@
-
 #ifndef NNET_HELPERS_H
 #define NNET_HELPERS_H
 
-#include "ac_channel.h"
+#include <ac_channel.h>
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -23,13 +22,14 @@ namespace nnet {
 #define WEIGHTS_DIR get_weights_dir()
 #endif
 
-template <class T, size_t SIZE> void load_weights_from_txt(T *w, const char *fname) {
-
+template <class T, size_t SIZE> 
+void load_weights_from_txt(T *w, const char *fname) 
+{
     std::string full_path = std::string(WEIGHTS_DIR) + "/" + std::string(fname);
     std::ifstream infile(full_path.c_str(), std::ios::binary);
 
     if (infile.fail()) {
-        std::cerr << "ERROR: file " << std::string(full_path) << " does not exist" << std::endl;
+        std::cerr << "ERROR: file " << std::string(fname) << " does not exist" << std::endl;
         exit(1);
     }
 
@@ -55,8 +55,9 @@ template <class T, size_t SIZE> void load_weights_from_txt(T *w, const char *fna
     }
 }
 
-template <class T, size_t SIZE> void load_compressed_weights_from_txt(T *w, const char *fname) {
-
+template <class T, size_t SIZE> 
+void load_compressed_weights_from_txt(T *w, const char *fname) 
+{
     std::string full_path = std::string(WEIGHTS_DIR) + "/" + std::string(fname);
     std::ifstream infile(full_path.c_str(), std::ios::binary);
 
@@ -100,8 +101,9 @@ template <class T, size_t SIZE> void load_compressed_weights_from_txt(T *w, cons
     }
 }
 
-template <class T, size_t SIZE> void load_exponent_weights_from_txt(T *w, const char *fname) {
-
+template <class T, size_t SIZE> 
+void load_exponent_weights_from_txt(T *w, const char *fname) 
+{
     std::string full_path = std::string(WEIGHTS_DIR) + "/" + std::string(fname);
     std::ifstream infile(full_path.c_str(), std::ios::binary);
 
@@ -153,18 +155,26 @@ template <int Twidth, int Ibits, bool Signed, ac_q_mode Qmode, ac_o_mode Omode>
 void convert_single_data(ac_fixed<Twidth, Ibits, Signed, Qmode, Omode> &src, double &dst) {
     dst = src.to_double();
 }
+
 template <int Twidth, int Ibits, bool Signed, ac_q_mode Qmode, ac_o_mode Omode>
 void convert_single_data(ac_fixed<Twidth, Ibits, Signed, Qmode, Omode> &src, float &dst) {
     dst = src.to_double();
 }
-template <class srcType, class dstType> void convert_single_data(srcType &src, dstType &dst) { dst = dstType(src); }
-template <class srcType, class dstType, size_t SIZE> void convert_data(srcType *src, dstType *dst) {
+
+template <class srcType, class dstType> 
+void convert_single_data(srcType &src, dstType &dst) { dst = dstType(src); }
+
+template <class srcType, class dstType, size_t SIZE> 
+void convert_data(srcType *src, dstType *dst) 
+{
     for (size_t i = 0; i < SIZE; i++) {
         convert_single_data(src[i], dst[i]);
     }
 }
 
-template <class srcType, class dstType, size_t SIZE> void convert_data(srcType *src, ac_channel<dstType> &dst) {
+template <class srcType, class dstType, size_t SIZE> 
+void convert_data(srcType *src, ac_channel<dstType> &dst) 
+{
     for (size_t i = 0; i < SIZE / dstType::size; i++) {
         dstType ctype;
         for (size_t j = 0; j < dstType::size; j++) {
@@ -174,7 +184,9 @@ template <class srcType, class dstType, size_t SIZE> void convert_data(srcType *
     }
 }
 
-template <class srcType, class dstType, size_t SIZE> void convert_data(ac_channel<srcType> &src, dstType *dst) {
+template <class srcType, class dstType, size_t SIZE> 
+void convert_data(ac_channel<srcType> &src, dstType *dst) 
+{
     for (size_t i = 0; i < SIZE / srcType::size; i++) {
         srcType ctype = src.read();
         for (size_t j = 0; j < srcType::size; j++) {
@@ -182,6 +194,57 @@ template <class srcType, class dstType, size_t SIZE> void convert_data(ac_channe
         }
     }
 }
+
+//=====================
+
+template <class srcType, class dstType, size_t SIZE, size_t BUS_WORDS>
+void convert_data(srcType *src, ac_channel<dstType> &dst) {
+    typedef dstType DstT;
+    typedef typename DstT::ElemType vector_t;
+    typedef typename vector_t::base_type base_t;
+
+    // constexpr int BUS_WORDS = DstT::size;
+    constexpr int N_CHANNELS = vector_t::packed_words;
+
+    DstT dst_pack;
+    vector_t inner_vector;
+
+    size_t idx = 0;
+    for (size_t i = 0; i < SIZE / (BUS_WORDS * N_CHANNELS); i++) {
+        for (size_t w = 0; w < BUS_WORDS; w++) {
+            for (size_t ch = 0; ch < N_CHANNELS; ch++) {
+                inner_vector[ch] = base_t(src[idx++]);
+            }
+            dst_pack[w] = inner_vector;
+        }
+        dst.write(dst_pack);
+    }
+}
+
+template <class srcType, class dstType, size_t SIZE, size_t BUS_WORDS>
+void convert_data(ac_channel<srcType> &src, dstType *dst) 
+{
+    typedef srcType SrcT;
+    typedef typename SrcT::ElemType vector_t;
+    typedef typename vector_t::base_type base_t;
+
+    // constexpr int BUS_WORDS = SrcT::size;
+    constexpr int N_CHANNELS = vector_t::packed_words;
+
+    size_t idx = 0;
+    for (size_t i = 0; i < SIZE / (BUS_WORDS * N_CHANNELS); i++) {
+        SrcT src_pack = src.read();
+        for (size_t w = 0; w < BUS_WORDS; w++) {
+            vector_t inner_vector = src_pack[w];
+            for (size_t ch = 0; ch < N_CHANNELS; ch++) {
+                base_t elem=inner_vector[ch];
+                dst[idx++] = elem.to_double(); // or static_cast<dstType> if not ac_fixed
+            }
+        }
+    }
+}
+
+//======================
 
 extern bool trace_enabled;
 extern std::map<std::string, void *> *trace_outputs;
@@ -193,7 +256,9 @@ template <class data_T, class save_T> void save_output_array(data_T *data, save_
     }
 }
 
-template <class data_T, class save_T> void save_output_array(ac_channel<data_T> &data, save_T *ptr, size_t layer_size) {
+template <class data_T, class save_T> 
+void save_output_array(ac_channel<data_T> &data, save_T *ptr, size_t layer_size) 
+{
     for (size_t i = 0; i < layer_size / data_T::size; i++) {
         data_T ctype = data.read();
         for (size_t j = 0; j < data_T::size; j++) {
@@ -203,7 +268,9 @@ template <class data_T, class save_T> void save_output_array(ac_channel<data_T> 
     }
 }
 
-template <class data_T> void save_output_array(ac_channel<data_T> &data, float *ptr, size_t layer_size) {
+template <class data_T> 
+void save_output_array(ac_channel<data_T> &data, float *ptr, size_t layer_size) 
+{
     for (size_t i = 0; i < layer_size / data_T::size; i++) {
         data_T ctype = data.read();
         for (size_t j = 0; j < data_T::size; j++) {
@@ -213,7 +280,9 @@ template <class data_T> void save_output_array(ac_channel<data_T> &data, float *
     }
 }
 
-template <class data_T> void save_output_array(ac_channel<data_T> &data, double *ptr, size_t layer_size) {
+template <class data_T> 
+void save_output_array(ac_channel<data_T> &data, double *ptr, size_t layer_size) 
+{
     for (size_t i = 0; i < layer_size / data_T::size; i++) {
         data_T ctype = data.read();
         for (size_t j = 0; j < data_T::size; j++) {
@@ -225,7 +294,9 @@ template <class data_T> void save_output_array(ac_channel<data_T> &data, double 
 
 // We don't want to include save_T in this function because it will be inserted into myproject.cpp
 // so a workaround with element size is used
-template <class data_T> void save_layer_output(data_T *data, const char *layer_name, size_t layer_size) {
+template <class data_T> 
+void save_layer_output(data_T *data, const char *layer_name, size_t layer_size) 
+{
     if (!trace_enabled)
         return;
 
@@ -255,7 +326,9 @@ template <class data_T> void save_layer_output(data_T *data, const char *layer_n
     }
 }
 
-template <class data_T> void save_layer_output(ac_channel<data_T> &data, const char *layer_name, size_t layer_size) {
+template <class data_T> 
+void save_layer_output(ac_channel<data_T> &data, const char *layer_name, size_t layer_size) 
+{
     if (!trace_enabled)
         return;
 
@@ -292,14 +365,17 @@ template <class data_T> void save_layer_output(ac_channel<data_T> &data, const c
 
 #endif
 
-template <class src_T, class dst_T, size_t OFFSET, size_t SIZE> void copy_data(std::vector<src_T> src, dst_T dst[SIZE]) {
+template <class src_T, class dst_T, size_t OFFSET, size_t SIZE> 
+void copy_data(std::vector<src_T> src, dst_T dst[SIZE]) 
+{
     typename std::vector<src_T>::const_iterator in_begin = src.cbegin() + OFFSET;
     typename std::vector<src_T>::const_iterator in_end = in_begin + SIZE;
     std::copy(in_begin, in_end, dst);
 }
 
 template <class src_T, class dst_T, size_t OFFSET, size_t SIZE>
-void copy_data(std::vector<src_T> src, ac_channel<dst_T> &dst) {
+void copy_data(std::vector<src_T> src, ac_channel<dst_T> &dst) 
+{
     typename std::vector<src_T>::const_iterator in_begin = src.cbegin() + OFFSET;
     typename std::vector<src_T>::const_iterator in_end = in_begin + SIZE;
 
@@ -314,7 +390,43 @@ void copy_data(std::vector<src_T> src, ac_channel<dst_T> &dst) {
     }
 }
 
-template <class src_T, class dst_T, size_t OFFSET, size_t SIZE> void copy_data_axi(std::vector<src_T> src, dst_T dst[SIZE]) {
+template <class SrcT, class DstT, size_t Offset, size_t Size, size_t BusWords>
+void copy_data(const std::vector<SrcT>& src, ac_channel<DstT>& dst) 
+{
+    typedef typename DstT::ElemType vector_t;    
+    typedef typename vector_t::base_type base_t;     
+
+    constexpr int N_CHANNELS = vector_t::packed_words;
+
+    DstT dst_pack;
+    vector_t inner_vector;
+
+    size_t idx = 0;
+    for (size_t word = 0; word < Size / (BusWords * N_CHANNELS); word++) {
+        for (size_t w = 0; w < BusWords; w++) {
+            for (size_t ch = 0; ch < N_CHANNELS; ch++) {
+                inner_vector[ch] = base_t(src[Offset + idx++]);
+            }
+            dst_pack[w] = inner_vector;
+        }
+
+        // Print dst_pack contents before writing
+        // std::cout << "Writing dst_pack: ";
+        // for (size_t w = 0; w < BusWords; w++) {
+        //     vector_t print_vec = dst_pack[w];
+        //     for (size_t ch = 0; ch < N_CHANNELS; ch++) {
+        //         std::cout << print_vec[ch] << " ";
+        //     }
+        // }
+        // std::cout << std::endl;
+
+        dst.write(dst_pack);
+    }
+}
+
+template <class src_T, class dst_T, size_t OFFSET, size_t SIZE> 
+void copy_data_axi(std::vector<src_T> src, dst_T dst[SIZE]) 
+{
     for (auto i = 0; i < SIZE; i++)
         if (i == SIZE - 1) {
             dst[i].data = src[i];
@@ -325,14 +437,18 @@ template <class src_T, class dst_T, size_t OFFSET, size_t SIZE> void copy_data_a
         }
 }
 
-template <class res_T, size_t SIZE> void print_result(res_T result[SIZE], std::ostream &out, bool keep = false) {
+template <class res_T, size_t SIZE> 
+void print_result(res_T result[SIZE], std::ostream &out, bool keep = false) 
+{
     for (unsigned i = 0; i < SIZE; i++) {
         out << result[i] << " ";
     }
     out << std::endl;
 }
 
-template <class res_T, size_t SIZE> void print_result(ac_channel<res_T> &result, std::ostream &out, bool keep = false) {
+template <class res_T, size_t SIZE> 
+void print_result(ac_channel<res_T> &result, std::ostream &out, bool keep = false) 
+{
     if (!keep) {
         while (result.available(1)) {
             res_T res_pack = result.read();
@@ -354,9 +470,41 @@ template <class res_T, size_t SIZE> void print_result(ac_channel<res_T> &result,
     }
 }
 
-template <class data_T, size_t SIZE> void fill_zero(data_T data[SIZE]) { std::fill_n(data, SIZE, 0.); }
+template <class res_T, size_t SIZE, size_t BUS_WORDS> 
+void print_result(ac_channel<res_T> &result, std::ostream &out, bool keep = false) 
+{
+    typedef typename res_T::ElemType vector_t;
+    typedef typename vector_t::base_type base_t;
 
-template <class data_T, size_t SIZE> void fill_zero(ac_channel<data_T> &data) {
+    base_t base_element;
+
+    vector_t inner_vector;
+    constexpr int N_CHANNELS = vector_t::packed_words;
+
+    while (result.available(1)) {
+        res_T res_pack = result.read();
+        for(unsigned int words=0; words<BUS_WORDS; words++)
+        {
+            inner_vector=res_pack[words];
+            for(unsigned int ch=0; ch<N_CHANNELS; ch++)
+            {
+                    base_element=inner_vector[ch];
+                    out << base_element << " ";
+                    // std::cout << "[word " << words << ", ch " << ch << "] = " << base_element << std::endl;
+            }
+            // out << " word";
+        }
+        //  out << " All Words Read ";
+    }
+    out << std::endl;
+}
+
+template <class data_T, size_t SIZE> 
+void fill_zero(data_T data[SIZE]) { std::fill_n(data, SIZE, 0.); }
+
+template <class data_T, size_t SIZE> 
+void fill_zero(ac_channel<data_T> &data) 
+{
     for (unsigned int i = 0; i < SIZE / data_T::size; i++) {
         data_T data_pack;
         for (unsigned int j = 0; j < data_T::size; j++) {
@@ -366,8 +514,37 @@ template <class data_T, size_t SIZE> void fill_zero(ac_channel<data_T> &data) {
     }
 }
 
+template <class data_T, size_t SIZE, size_t BUS_WORDS>
+void fill_zero(ac_channel<data_T> &data) 
+{
+    typedef typename data_T::ElemType vector_t;
+    typedef typename vector_t::base_type base_t;
+
+    vector_t vector;
+    base_t base;
+
+    constexpr int N_CHANNELS = vector_t::packed_words;
+
+    for (unsigned int i = 0; i < SIZE / (N_CHANNELS * BUS_WORDS); i++) {
+        data_T data_pack;
+
+        for (unsigned int j = 0; j < BUS_WORDS; j++) {
+            for (unsigned int k = 0; k < N_CHANNELS; k++) {
+                vector[k] = base_t(0);
+            }
+            data_pack[j] = vector;
+        }
+
+        data.write(data_pack);
+    }
+
+    // std::cout << "Fill_Random AC_CHANNEL" << std::endl;
+}
+
 // Fix for CAT-36531
-template <class data_T, size_t SIZE> void fill_random(data_T data[SIZE]) {
+template <class data_T, size_t SIZE> 
+void fill_random(data_T data[SIZE]) 
+{
     // std::cout << "Fill_Random SIZE:"<< SIZE << std::endl;
     data_T MAX_VALUE;
     for (unsigned int i = 0; i < SIZE; i++) {
@@ -377,7 +554,9 @@ template <class data_T, size_t SIZE> void fill_random(data_T data[SIZE]) {
     }
 }
 
-template <class data_T, size_t SIZE> void fill_random(ac_channel<data_T> &data) {
+template <class data_T, size_t SIZE> 
+void fill_random(ac_channel<data_T> &data) 
+{
     typedef typename data_T::value_type base_T;
     base_T MAX_VALUE;
     for (unsigned int i = 0; i < SIZE / data_T::size; i++) {
@@ -392,7 +571,39 @@ template <class data_T, size_t SIZE> void fill_random(ac_channel<data_T> &data) 
     // std::cout << "Fill_Random AC_CHANNEL" << std::endl;
 }
 
-template <class dataType, unsigned int nrows> int read_file_1D(const char *filename, dataType data[nrows]) {
+template <class data_T, size_t SIZE, size_t BUS_WORDS>
+void fill_random(ac_channel<data_T> &data) 
+{
+    typedef typename data_T::ElemType vector_t;
+    typedef typename vector_t::base_type base_t;
+
+    vector_t vector;
+    base_t base;
+
+    constexpr int N_CHANNELS = vector_t::packed_words;
+    base_t MAX_VALUE;
+
+    for (unsigned int i = 0; i < SIZE / (N_CHANNELS * BUS_WORDS); i++) {
+        data_T data_pack;
+
+        for (unsigned int j = 0; j < BUS_WORDS; j++) {
+            for (unsigned int k = 0; k < N_CHANNELS; k++) {
+                // Generate a random value (for example, between 0 and 1)
+                base_t random_value = (base_t)rand() / MAX_VALUE.template set_val<AC_VAL_MIN>();
+                vector[k] = random_value;
+            }
+            data_pack[j] = vector;
+        }
+
+        data.write(data_pack);
+    }
+
+    // std::cout << "Fill_Random AC_CHANNEL" << std::endl;
+}
+
+template <class dataType, unsigned int nrows> 
+int read_file_1D(const char *filename, dataType data[nrows]) 
+{
     FILE *fp;
     fp = fopen(filename, "r");
     if (fp == 0) {
@@ -412,7 +623,8 @@ template <class dataType, unsigned int nrows> int read_file_1D(const char *filen
 }
 
 template <class dataType, unsigned int nrows, unsigned int ncols>
-int read_file_2D(const char *filename, dataType data[nrows][ncols]) {
+int read_file_2D(const char *filename, dataType data[nrows][ncols]) 
+{
     FILE *fp;
     fp = fopen(filename, "r");
     if (fp == 0) {
@@ -433,7 +645,9 @@ int read_file_2D(const char *filename, dataType data[nrows][ncols]) {
     return 0;
 }
 
-template <class in_T, class out_T, int N_IN> void change_type(ac_channel<in_T> &in, ac_channel<out_T> &out) {
+template <class in_T, class out_T, int N_IN> 
+void change_type(ac_channel<in_T> &in, ac_channel<out_T> &out) 
+{
     in_T datareg;
     ac_channel<out_T> input_trunc;
     for (int ii = 0; ii < N_IN; ii++) {
@@ -441,7 +655,9 @@ template <class in_T, class out_T, int N_IN> void change_type(ac_channel<in_T> &
     }
 }
 
-template <class data_T, int N_IN> void hls_stream_debug(ac_channel<data_T> &data, ac_channel<data_T> &res) {
+template <class data_T, int N_IN> 
+void hls_stream_debug(ac_channel<data_T> &data, ac_channel<data_T> &res) 
+{
     data_T datareg;
     for (int ii = 0; ii < N_IN; ii++) {
         datareg = data.read();

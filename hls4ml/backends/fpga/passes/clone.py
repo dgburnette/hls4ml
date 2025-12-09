@@ -43,7 +43,8 @@ def register_clone(backend):
     backend.register_pass('clone_output', CloneOutput)
 
     # Register template passes
-    backend.register_template(CloneFunctionTemplate)
+    if backend.name != 'Catapult':
+        backend.register_template(CloneFunctionTemplate)
 
 
 class CloneOutput(OptimizerPass):

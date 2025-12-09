@@ -9,7 +9,7 @@ class GenerateConvStreamingInstructions(OptimizerPass):
         is_match = (
             isinstance(node, (Conv1D, SeparableConv1D, Conv2D, SeparableConv2D))
             and node.model.config.get_config_value('IOType').lower() == 'io_stream'
-            and node.get_attr('implementation').lower() == 'encoded'
+            and (node.get_attr('implementation').lower() in ['encoded','ac_window'])
         )
         return is_match
 

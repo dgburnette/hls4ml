@@ -2,12 +2,12 @@ import json
 
 import h5py
 
+import hls4ml.backends.fpga.fpga_types as fpga_types
+import hls4ml.backends.template as param_types
+import hls4ml.model.graph as graph_types
+import hls4ml.writer.catapult_writer as writer_types
 from hls4ml.converters.utils import parse_data_format
 from hls4ml.model import ModelGraph
-import hls4ml.backends.fpga.fpga_types as fpga_types
-import hls4ml.writer.catapult_writer as writer_types
-import hls4ml.model.graph as graph_types
-import hls4ml.backends.template as param_types
 
 MAXMULT = 4096
 
@@ -306,8 +306,8 @@ def parse_keras_model(model_arch, reader, verbose=True):
             print(
                 'Layer name: {}, layer type: {}, input shapes: {}, output shape: {}'.format(
                     layer['name'], layer['class_name'], input_shapes, output_shape
-                    )
                 )
+            )
         layer_list.append(layer)
         if 'activation' in layer and layer['class_name'] not in activation_layers + recurrent_layers:  # + qkeras_layers:
             act_layer = {}
@@ -344,7 +344,7 @@ def parse_keras_model(model_arch, reader, verbose=True):
     return layer_list, input_layers, output_layers, output_shapes
 
 
-#def keras_to_hls(config, verbose=True):
+# def keras_to_hls(config, verbose=True):
 #    model_arch, reader = get_model_arch(config)
 #    fpga_types.implementation_type = config.get('implementation', None)
 #    print(f"[DEBUG] implementation_type set to: {fpga_types.implementation_type}")
@@ -353,12 +353,13 @@ def parse_keras_model(model_arch, reader, verbose=True):
 #    hls_model = ModelGraph(config, layer_list, input_layers, output_layers)
 #    return hls_model
 
+
 def keras_to_hls(config, verbose=True):
     model_arch, reader = get_model_arch(config)
     layer_list, input_layers, output_layers, _ = parse_keras_model(model_arch, reader, verbose)
 
     enforce_supported_configs(layer_list)
-    
+
     # Handle implementation-specific setup
     handle_ac_window_implementation(config, layer_list)
 
@@ -403,16 +404,16 @@ def handle_ac_window_implementation(config, layer_list):
             supported = False
 
     if not supported:
-        print("[INFO] Falling back to default implementation due to unsupported layer configuration.")
+        print('[INFO] Falling back to default implementation due to unsupported layer configuration.')
         impl_type = None
 
     fpga_types.implementation_type = impl_type
     writer_types.write_impl_type = impl_type
     graph_types.graph_impl_type = impl_type
-    param_types.param_impl_type=impl_type
+    param_types.param_impl_type = impl_type
+
 
 def enforce_supported_configs(layer_list):
-    
     """
     Checks for unsupported configurations:
     - Conv2D or DepthwiseConv2D layers
@@ -439,5 +440,5 @@ def enforce_supported_configs(layer_list):
             layer_name = layer.get('name', '<unnamed>')
             raise AssertionError(
                 f"[ERROR] Layer '{layer_name}' ({class_name}) has stride_height={stride_h} "
-                f"with kernel_height={filt_h}, which is not supported."
+                f'with kernel_height={filt_h}, which is not supported.'
             )

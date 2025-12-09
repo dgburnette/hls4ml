@@ -15,7 +15,6 @@ struct padding1d_config {
 
 template <class data_T, class res_T, typename CONFIG_T>
 void zeropad1d_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width], data_T res[CONFIG_T::n_chan * CONFIG_T::out_width]) {
-    //#pragma HLS PIPELINE
 
     for (int j = 0; j < CONFIG_T::n_chan; j++) {
         for (int i = 0; i < CONFIG_T::pad_left; i++) {
@@ -32,9 +31,18 @@ void zeropad1d_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width], data_T res
     }
 }
 
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void zeropad1d_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width], ac_sync &sync_data,
+                  data_T res[CONFIG_T::n_chan * CONFIG_T::out_width], ac_sync &sync_res)
+{
+  sync_data.sync_in();
+  zeropad1d_cf<data_T, res_T, CONFIG_T>(data, res);
+  sync_res.sync_out();
+}
+
 template <class data_T, class res_T, typename CONFIG_T>
 void zeropad1d_cl(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width], res_T res[CONFIG_T::n_chan * CONFIG_T::out_width]) {
-    //#pragma HLS PIPELINE
 
     for (int i = 0; i < CONFIG_T::pad_left; i++) {
         for (int j = 0; j < CONFIG_T::n_chan; j++) {
@@ -55,6 +63,16 @@ void zeropad1d_cl(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width], res_T res[
     }
 }
 
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void zeropad1d_cl(data_T data[CONFIG_T::n_chan * CONFIG_T::in_width], ac_sync &sync_data,
+                  res_T res[CONFIG_T::n_chan * CONFIG_T::out_width], ac_sync &sync_res)
+{
+  sync_data.sync_in();
+  zeropad1d_cl<data_T, res_T, CONFIG_T>(data, res);
+  sync_res.sync_out();
+}
+  
 struct padding2d_config {
     static const unsigned n_chan = 10;
     static const unsigned in_height = 10;
@@ -70,7 +88,6 @@ struct padding2d_config {
 template <class data_T, class res_T, typename CONFIG_T>
 void zeropad2d_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_height * CONFIG_T::in_width],
                   data_T res[CONFIG_T::n_chan * CONFIG_T::out_height * CONFIG_T::out_width]) {
-    //#pragma HLS PIPELINE
 
     for (int k = 0; k < CONFIG_T::n_chan; k++) {
 
@@ -100,10 +117,19 @@ void zeropad2d_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_height * CONFIG_T:
     }
 }
 
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void zeropad2d_cf(data_T data[CONFIG_T::n_chan * CONFIG_T::in_height * CONFIG_T::in_width], ac_sync &sync_data,
+                  data_T res[CONFIG_T::n_chan * CONFIG_T::out_height * CONFIG_T::out_width], ac_sync &sync_res)
+{
+  sync_data.sync_in();
+  zeropad2d_cf<data_T, res_T, CONFIG_T>(data, res);
+  sync_res.sync_out();
+}
+  
 template <class data_T, class res_T, typename CONFIG_T>
 void zeropad2d_cl(data_T data[CONFIG_T::n_chan * CONFIG_T::in_height * CONFIG_T::in_width],
                   res_T res[CONFIG_T::n_chan * CONFIG_T::out_height * CONFIG_T::out_width]) {
-    //#pragma HLS PIPELINE
 
     for (int i = 0; i < CONFIG_T::pad_top; i++) {
         for (int j = 0; j < CONFIG_T::out_width; j++) {
@@ -139,6 +165,16 @@ void zeropad2d_cl(data_T data[CONFIG_T::n_chan * CONFIG_T::in_height * CONFIG_T:
         }
     }
 }
+
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void zeropad2d_cl(data_T data[CONFIG_T::n_chan * CONFIG_T::in_height * CONFIG_T::in_width], ac_sync &sync_data,
+                  res_T res[CONFIG_T::n_chan * CONFIG_T::out_height * CONFIG_T::out_width], ac_sync &sync_res)
+{
+  sync_data.sync_in();
+  zeropad2d_cl<data_T, res_T, CONFIG_T>(data, res);
+  sync_res.sync_out();
+}  
 
 } // namespace nnet
 

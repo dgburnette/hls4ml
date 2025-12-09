@@ -4,6 +4,7 @@
 #include <ac_channel.h>
 #include <ac_fixed.h>
 #include <ac_int.h>
+#include <ac_sync.h>
 
 #include "defines.h"
 

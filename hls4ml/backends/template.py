@@ -1,5 +1,7 @@
 from hls4ml.model.optimizer.optimizer import OptimizerPass
 
+param_impl_type = None  # global definition
+
 
 class Template(OptimizerPass):
     """The Template base class, should not be instantiated directly
@@ -63,6 +65,12 @@ class LayerConfigTemplate(Template):
         params['iotype'] = layer.model.config.get_config_value('IOType')
         params['reuse'] = layer.get_attr('reuse_factor')
         params['namespace'] = layer.model.config.get_writer_config().get('Namespace', None) or 'nnet'
+        if param_impl_type == 'ac_window':
+            params['impl'] = param_impl_type
+            params['BW'] = layer.model.config.get_config_value('AC_BUS_WORDS', default='1')
+        else:
+            params['impl'] = 'non_packed'
+            params['BW'] = 1
 
         return params
 
