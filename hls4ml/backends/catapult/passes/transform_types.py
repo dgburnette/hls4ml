@@ -1,10 +1,10 @@
-from hls4ml.backends.fpga.fpga_types import ACTypeConverter, HLSTypeConverter, StaticWeightVariableConverter
 from hls4ml.backends.catapult.catapult_types import (
     CatapultArrayVariableConverter,
     CatapultInplaceArrayVariableConverter,
     CatapultInplaceStreamVariableConverter,
     CatapultStreamVariableConverter,
 )
+from hls4ml.backends.fpga.fpga_types import ACTypeConverter, HLSTypeConverter, StaticWeightVariableConverter
 from hls4ml.model.optimizer import GlobalOptimizerPass
 from hls4ml.model.types import InplaceTensorVariable
 
@@ -31,7 +31,6 @@ class TransformTypes(GlobalOptimizerPass):
                 new_var = self.array_var_converter.convert(var, pragma='stream')
             elif io_type == 'io_parallel':
                 if out_name in node.model.inputs:
-                    # NOTE this needs to be changed to partition
                     new_var = self.array_var_converter.convert(var, pragma='reshape')
                 elif isinstance(var, InplaceTensorVariable):
                     new_var = self.inplace_array_var_converter.convert(var, pragma='')

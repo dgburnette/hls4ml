@@ -51,10 +51,7 @@ class InsertZeroPaddingBeforeConv2D(OptimizerPass):
     name = 'insert_zero_padding_before_conv2d'
 
     def match(self, node):
-        # TODO: is_match = isinstance(node, (Conv2D, SeparableConv2D, DepthwiseConv2D)) and (
-        #           node.get_attr('implementation') != 'ac_window') and (
         is_match = isinstance(node, (Conv2D, SeparableConv2D)) and (
-            node.get_attr('implementation') != 'ac_window') and (
             (node.get_attr('pad_left') != 0)
             or (node.get_attr('pad_right') != 0)
             or (node.get_attr('pad_top') != 0)
