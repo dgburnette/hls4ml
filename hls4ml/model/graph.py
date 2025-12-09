@@ -18,7 +18,6 @@ from hls4ml.model.layers import Layer, layer_map
 from hls4ml.model.optimizer import get_available_passes, optimize_model
 from hls4ml.model.types import Serializable
 from hls4ml.utils.string_utils import convert_to_snake_case
-graph_impl_type = None  # global definition
 
 
 class HLSConfig(Serializable):
@@ -193,22 +192,8 @@ class HLSConfig(Serializable):
         if conv_implementation is None:
             conv_implementation = self.layer_type_conv_implementation.get(layer.__class__.__name__.lower())
         if conv_implementation is None:
-            conv_impl_type=graph_impl_type
-            if conv_impl_type == 'ac_window':
-                ### TODO: right now only supports filt_height == filter_width and stride_height == stride_width and CatapultConv2D          
-                attributes = layer.attributes  # Access the AttributeDict object
-                if "pointwise" in layer.name:
-                    conv_implementation = 'ac_window'
-                elif (
-                    layer.__class__.__name__ in ("CatapultConv2D", "CatapultDepthwiseConv2D", "CatapultSeparableConv2D")
-                    and attributes.get('filt_height') != 1
-                    and attributes.get('stride_height') == 1
-                ):
-                    conv_implementation = 'ac_window'
-                else:
-                    conv_implementation = self.model_conv_implementation
-            else:
-                conv_implementation = self.model_conv_implementation
+            conv_implementation = self.model_conv_implementation
+
         return conv_implementation
 
     def is_resource_strategy(self, layer):

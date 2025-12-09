@@ -72,7 +72,6 @@ class SeparableToDepthwiseAndConv(OptimizerPass):
         # creating the attributes
         dw_attributes = {k: node.attributes[k] for k in SeparableToDepthwiseAndConv._dw_attributes if k in node.attributes}
         dw_attributes['n_filt'] = dw_attributes['n_chan'] * dw_attributes['depth_multiplier']
-        dw_attributes['padding_type'] = node.get_attr('padding_type')
         dw_attributes['use_bias'] = False
 
         new_dw = model.make_node('DepthwiseConv' + dim, dw_name, dw_attributes, [node.inputs[0]])
@@ -110,7 +109,6 @@ class SeparableToDepthwiseAndConv(OptimizerPass):
         pw_attributes['pad_right'] = 0
         pw_attributes['pad_top'] = 0
         pw_attributes['pad_bottom'] = 0
-        pw_attributes['padding_type'] = node.get_attr('padding_type')
         pw_attributes['in_width'] = pw_attributes['out_width']
         pw_attributes['in_height'] = pw_attributes.get('out_height', 1)
         pw_attributes['n_chan'] = node.get_attr('n_chan') * node.get_attr('depth_multiplier')

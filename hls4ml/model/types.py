@@ -611,9 +611,6 @@ class TensorVariable(Variable):
         else:
             self.shape = [int(shape)]
 
-    def get_shape(self):
-        return self.shape
-
     def size(self):
         nelem = 1
         for dim in self.shape:
