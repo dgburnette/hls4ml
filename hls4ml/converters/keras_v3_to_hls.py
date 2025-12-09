@@ -7,6 +7,10 @@ from typing import Any
 import numpy as np
 
 from hls4ml.model import ModelGraph
+import hls4ml.backends.fpga.fpga_types as fpga_types
+import hls4ml.writer.catapult_writer as writer_types
+import hls4ml.model.graph as graph_types
+import hls4ml.backends.template as param_types
 
 if typing.TYPE_CHECKING:
     import keras
@@ -52,7 +56,7 @@ def get_io_tensors(layer: 'keras.Layer', node_whitelist: set[int] | None = None)
 
 
 def resolve_dependency_relation(model: 'keras.Model'):
-    '''Given a keras model, return the following information:
+    """Given a keras model, return the following information:
         - A list of input tensor names
         - A list of output tensor names
         - A list of (layer_name, input_tensor_names, output_tensor_names) tuples
@@ -70,7 +74,7 @@ def resolve_dependency_relation(model: 'keras.Model'):
                 input tensor names, and a tuple of its output tensor names.
             - tensors (dict[str, KerasTensor]): A dictionary mapping tensor names
                 to KerasTensor objects.
-    '''
+    """
 
     tensors: dict[str, 'KerasTensor'] = {}
     'tensor_name -> KerasTensor'
@@ -97,7 +101,7 @@ def resolve_dependency_relation(model: 'keras.Model'):
 
 
 class UniqueName:
-    '''Helper class to generate unique names for layers, if one being used multiple times.'''
+    """Helper class to generate unique names for layers, if one being used multiple times."""
 
     def __init__(self):
         self.used_names: set[str] = set('input')
@@ -120,7 +124,7 @@ class UniqueName:
 
 
 class KerasV3HandlerDispatcher:
-    '''Dispatcher class to handle different types of keras v3 layers.'''
+    """Dispatcher class to handle different types of keras v3 layers."""
 
     def __init__(self, layer_handlers: dict[str, T_kv3_handler], v2_layer_handlers=None):
         self.registry = layer_handlers
@@ -208,7 +212,7 @@ class KerasV3HandlerDispatcher:
 
 
 def parse_keras_v3_model(model: 'keras.Model'):
-    '''Parse a keras model into a list of dictionaries, each
+    """Parse a keras model into a list of dictionaries, each
     representing a layer in the HLS model, and a list of input and
     output layer names.
 
@@ -225,7 +229,7 @@ def parse_keras_v3_model(model: 'keras.Model'):
 
     Raises:
         ValueError: If a circular dependency is detected.
-    '''
+    """
 
     assert model.built, 'Model must be built before parsing'
 
@@ -290,6 +294,94 @@ def parse_keras_v3_model(model: 'keras.Model'):
     return layer_list, input_layer_names, output_layer_names, batch_output_shapes
 
 
-def keras_v3_to_hls(config):
+#def keras_to_hls(config, verbose=True):
+#    model_arch, reader = get_model_arch(config)
+#    fpga_types.implementation_type = config.get('implementation', None)
+#    layer_list, input_layers, output_layers, _ = parse_keras_model(model_arch, reader, verbose)
+#    print('Creating HLS model')
+#    hls_model = ModelGraph(config, layer_list, input_layers, output_layers)
+#    return hls_model
+
+def keras_v3_to_hls(config, verbose=True):
     layer_list, input_layers, output_layers, _ = parse_keras_v3_model(config['KerasModel'])
+
+    # Handle implementation-specific setup
+    handle_ac_window_implementation(config, layer_list)
+
+    print('Creating HLS model')
     return ModelGraph.from_layer_list(config, layer_list, input_layers, output_layers)
+
+def handle_ac_window_implementation(config, layer_list):
+    # print(f"[DEBUG] Full config: {config}")
+    impl_type = config.get('implementation', None)
+    # print(f"[DEBUG] implementation_type set to: {impl_type}")
+
+    if impl_type != 'ac_window':
+        return  # Nothing to do if not ac_window
+
+    supported = True
+    target_classes = {'conv2d', 'separableconv2d', 'depthwiseconv2d'}
+
+    for layer in layer_list:
+        class_name = layer.get('class_name', '').lower()
+        if class_name not in target_classes:
+            continue
+
+        stride_h = layer.get('stride_height', 1)
+        stride_w = layer.get('stride_width', 1)
+        filt_h = layer.get('filt_height', 1)
+        filt_w = layer.get('filt_width', 1)
+
+        if stride_h > 1 or stride_w > 1:
+            print(
+                f"[WARNING] Layer '{layer.get('name')}' has stride ({stride_h}, {stride_w}) "
+                f"which is not supported with 'ac_window'."
+            )
+            supported = False
+
+        if filt_h <= 1 or filt_w <= 1:
+            print(
+                f"[WARNING] Layer '{layer.get('name')}' has filter size ({filt_h}, {filt_w}) "
+                f"which is not supported with 'ac_window'."
+            )
+            supported = False
+
+    if not supported:
+        print("[INFO] Falling back to default implementation due to unsupported layer configuration.")
+        impl_type = None
+
+    fpga_types.implementation_type = impl_type
+    writer_types.write_impl_type = impl_type
+    graph_types.graph_impl_type = impl_type
+    param_types.param_impl_type=impl_type
+
+def enforce_supported_configs(layer_list):
+    
+    """
+    Checks for unsupported configurations:
+    - Conv2D or DepthwiseConv2D layers
+    - stride_h > 1 while kernel height == 1
+    - All 1D layers with data_format features other than 'channels_last'
+    """
+    target_classes = {'conv2d', 'separableconv2d', 'depthwiseconv2d'}
+
+    for layer in layer_list:
+        if ('data_format' in layer) and layer['data_format'] != 'channels_last':
+            raise AssertionError(
+                f"[ERROR] Layer '{layer.get('name')}' has data_format='{layer['data_format']}', "
+                f"only 'channels_last' is supported."
+            )
+
+        class_name = layer.get('class_name', '').lower()
+        if class_name not in target_classes:
+            continue
+
+        stride_h = layer.get('stride_height', 1)
+        filt_h = layer.get('filt_height', 1)
+
+        if filt_h == 1 and stride_h > 1:
+            layer_name = layer.get('name', '<unnamed>')
+            raise AssertionError(
+                f"[ERROR] Layer '{layer_name}' ({class_name}) has stride_height={stride_h} "
+                f"with kernel_height={filt_h}, which is not supported."
+            )

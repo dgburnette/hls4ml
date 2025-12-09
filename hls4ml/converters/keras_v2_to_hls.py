@@ -2,7 +2,12 @@ import json
 
 import h5py
 
+from hls4ml.converters.utils import parse_data_format
 from hls4ml.model import ModelGraph
+import hls4ml.backends.fpga.fpga_types as fpga_types
+import hls4ml.writer.catapult_writer as writer_types
+import hls4ml.model.graph as graph_types
+import hls4ml.backends.template as param_types
 
 
 class KerasReader:
@@ -127,7 +132,7 @@ def get_layer_handlers():
     return layer_handlers
 
 
-def register_keras_layer_handler(layer_cname, handler_func):
+def register_keras_v2_layer_handler(layer_cname, handler_func):
     """Register a handler function for the given layer class name.
 
     The handler function should have the following signature:
@@ -221,7 +226,7 @@ def get_model_arch(config):
     return model_arch, reader
 
 
-def parse_keras_model(model_arch, reader):
+def parse_keras_model(model_arch, reader, verbose=True):
     # This is a list of dictionaries to hold all the layer info we need to generate HLS
     layer_list = []
 
@@ -256,6 +261,8 @@ def parse_keras_model(model_arch, reader):
 
     layer_config = None
     if model_arch['class_name'] == 'Sequential':
+        if verbose:
+            print('Interpreting Sequential')
         layer_config = model_arch['config']
         if 'layers' in layer_config:  # Newer Keras versions have 'layers' in 'config' key
             layer_config = layer_config['layers']
@@ -266,7 +273,11 @@ def parse_keras_model(model_arch, reader):
             input_layer['class_name'] = 'InputLayer'
             input_layer['input_shape'] = layer_config[0]['config']['batch_input_shape'][1:]
             layer_list.append(input_layer)
+            if verbose:
+                print('Input shape:', input_layer['input_shape'])
     elif model_arch['class_name'] in ['Model', 'Functional']:  # TF >= 2.3 calls it 'Functional' API
+        if verbose:
+            print('Interpreting Model')
         layer_config = model_arch['config']['layers']
         input_layers = [inp[0] for inp in model_arch['config']['input_layers']]
         output_layers = [out[0] for out in model_arch['config']['output_layers']]
@@ -279,6 +290,8 @@ def parse_keras_model(model_arch, reader):
     output_shapes = {}
     output_shape = None
 
+    if verbose:
+        print('Topology:')
     for keras_layer in layer_config:
         if 'batch_input_shape' in keras_layer['config']:
             if 'inbound_nodes' in keras_layer and len(keras_layer['inbound_nodes']) > 0:
@@ -312,11 +325,21 @@ def parse_keras_model(model_arch, reader):
         # Extract inbound nodes
         if 'inbound_nodes' in keras_layer and len(keras_layer['inbound_nodes']) > 0:
             input_names = [inputs_map.get(inp[0], inp[0]) for inp in keras_layer['inbound_nodes'][0]]
+            if keras_layer['inbound_nodes'][0][0][-1]:
+                # multi_head_attention has inbound: [[['input_3', 0, 0, {'value': ['dense_3', 0, 0]}]]]
+                inputname2 = list(keras_layer['inbound_nodes'][0][0][-1].values())
+                input_names += [inp[0] for inp in inputname2]
         else:
             input_names = None
 
         layer, output_shape = layer_handlers[keras_class](keras_layer, input_names, input_shapes, reader)
 
+        if verbose:
+            print(
+                'Layer name: {}, layer type: {}, input shapes: {}, output shape: {}'.format(
+                    layer['name'], layer['class_name'], input_shapes, output_shape
+                    )
+                )
         layer_list.append(layer)
         if 'activation' in layer and layer['class_name'] not in activation_layers + recurrent_layers:  # + qkeras_layers:
             act_layer = {}
@@ -331,6 +354,14 @@ def parse_keras_model(model_arch, reader):
             else:
                 act_layer['class_name'] = 'Activation'
                 act_layer['config'] = {'name': layer['name'] + '_' + act_details, 'activation': act_details}
+
+                shape = parse_data_format(input_shapes[0], layer['data_format'])
+                if shape is not None:
+                    if len(shape) == 3:
+                        (act_layer['in_height'], act_layer['in_width'], act_layer['n_chan']) = shape
+                    elif len(shape) == 2:
+                        (act_layer['in_width'], act_layer['n_chan']) = shape
+
             act_layer, output_shape = layer_handlers[act_layer['class_name']](act_layer, None, [output_shape], reader)
             inputs_map[layer['name']] = act_layer['name']
             if output_layers is not None and layer['name'] in output_layers:
@@ -345,7 +376,96 @@ def parse_keras_model(model_arch, reader):
     return layer_list, input_layers, output_layers, output_shapes
 
 
-def keras_v2_to_hls(config):
+# def keras_v2_to_hls(config, verbose=True):
+#    model_arch, reader = get_model_arch(config)
+#    layer_list, input_layers, output_layers, _ = parse_keras_model(model_arch, reader, verbose)
+#    print('Creating HLS model')
+#    return ModelGraph.from_layer_list(config, layer_list, input_layers, output_layers)
+
+def keras_v2_to_hls(config, verbose=True):
     model_arch, reader = get_model_arch(config)
-    layer_list, input_layers, output_layers, _ = parse_keras_model(model_arch, reader)
+    layer_list, input_layers, output_layers, _ = parse_keras_model(model_arch, reader, verbose)
+
+    enforce_supported_configs(layer_list)
+
+    # Handle implementation-specific setup
+    handle_ac_window_implementation(config, layer_list)
+
+    print('Creating HLS model')
     return ModelGraph.from_layer_list(config, layer_list, input_layers, output_layers)
+
+
+def handle_ac_window_implementation(config, layer_list):
+    # print(f"[DEBUG] Full config: {config}")
+    impl_type = config.get('implementation', None)
+    # print(f"[DEBUG] implementation_type set to: {impl_type}")
+
+    if impl_type != 'ac_window':
+        return  # Nothing to do if not ac_window
+
+    supported = True
+    target_classes = {'conv2d', 'separableconv2d', 'depthwiseconv2d'}
+
+    for layer in layer_list:
+        class_name = layer.get('class_name', '').lower()
+        if class_name not in target_classes:
+            continue
+
+        stride_h = layer.get('stride_height', 1)
+        stride_w = layer.get('stride_width', 1)
+        filt_h = layer.get('filt_height', 1)
+        filt_w = layer.get('filt_width', 1)
+
+        if stride_h > 1 or stride_w > 1:
+            print(
+                f"[WARNING] Layer '{layer.get('name')}' has stride ({stride_h}, {stride_w}) "
+                f"which is not supported with 'ac_window'."
+            )
+            supported = False
+
+        if filt_h <= 1 or filt_w <= 1:
+            print(
+                f"[WARNING] Layer '{layer.get('name')}' has filter size ({filt_h}, {filt_w}) "
+                f"which is not supported with 'ac_window'."
+            )
+            supported = False
+
+    if not supported:
+        print("[INFO] Falling back to default implementation due to unsupported layer configuration.")
+        impl_type = None
+
+    fpga_types.implementation_type = impl_type
+    writer_types.write_impl_type = impl_type
+    graph_types.graph_impl_type = impl_type
+    param_types.param_impl_type=impl_type
+
+def enforce_supported_configs(layer_list):
+    
+    """
+    Checks for unsupported configurations:
+    - Conv2D or DepthwiseConv2D layers
+    - stride_h > 1 while kernel height == 1
+    - All 1D layers with data_format features other than 'channels_last'
+    """
+    target_classes = {'conv2d', 'separableconv2d', 'depthwiseconv2d'}
+
+    for layer in layer_list:
+        if ('data_format' in layer) and layer['data_format'] != 'channels_last':
+            raise AssertionError(
+                f"[ERROR] Layer '{layer.get('name')}' has data_format='{layer['data_format']}', "
+                f"only 'channels_last' is supported."
+            )
+
+        class_name = layer.get('class_name', '').lower()
+        if class_name not in target_classes:
+            continue
+
+        stride_h = layer.get('stride_height', 1)
+        filt_h = layer.get('filt_height', 1)
+
+        if filt_h == 1 and stride_h > 1:
+            layer_name = layer.get('name', '<unnamed>')
+            raise AssertionError(
+                f"[ERROR] Layer '{layer_name}' ({class_name}) has stride_height={stride_h} "
+                f"with kernel_height={filt_h}, which is not supported."
+            )

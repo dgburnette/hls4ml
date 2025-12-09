@@ -33,9 +33,14 @@ def requires(pkg: str):
             qualifier = f'Function {f.__name__}'
 
         if not pkg.startswith('_'):
-            reqs = ', '.join(extra_requires[pkg])
-            msg = f'{qualifier} requires {reqs}, but package {{ename}} is missing'
-            'Please consider install it with `pip install hls4ml[{pkg}]` for full functionality with {pkg}.'
+            # TODO quartus-report triggers the error check below - adding condition check to prevent abort
+            if pkg in extra_requires:
+                reqs = ', '.join(extra_requires[pkg])
+                msg = f'{qualifier} requires {reqs}, but package {{ename}} is missing'
+                'Please consider install it with `pip install hls4ml[{pkg}]` for full functionality with {pkg}.'
+            else:
+                msg = f'key {pkg} not found in dictionary extra_requires'
+                'key not found'
         else:
             msg = f'{qualifier} requires {pkg[1:]}, but package {{ename}} is missing.'
             'Consider install it with `pip install {pkg}`.'

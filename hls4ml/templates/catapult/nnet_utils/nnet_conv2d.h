@@ -2,6 +2,7 @@
 #ifndef NNET_CONV2D_H_
 #define NNET_CONV2D_H_
 
+#include <ac_sync.h>
 #include "nnet_common.h"
 #include "nnet_conv2d_latency.h"
 #include "nnet_conv2d_resource.h"
@@ -44,7 +45,8 @@ void conv_2d_cf(
     data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan],
     res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt],
     typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
-    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
+    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
+{
     if (CONFIG_T::strategy == nnet::latency) {
         conv_2d_latency_cf<data_T, res_T, CONFIG_T>(data, res, weights, biases);
     } else {
@@ -52,31 +54,79 @@ void conv_2d_cf(
     }
 }
 
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void conv_2d_cf(
+    data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan], ac_sync &sync_data,
+    res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt], ac_sync &sync_res,
+    typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
+    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
+{
+  sync_data.sync_in();
+  conv_2d_cf<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+  sync_res.sync_out();
+}
+
 template <class data_T, class res_T, typename CONFIG_T>
 void conv_2d_cl(
     data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan],
     res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt],
     typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
-    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
-    if (CONFIG_T::strategy == nnet::latency) {
+    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
+{
+    if (CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) {
         conv_2d_latency_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
-    } else {
+    // } else if (CONFIG_T::strategy == nnet::resource || CONFIG_T::strategy == nnet::resource_unrolled) {
+    } else if (CONFIG_T::strategy == nnet::resource ) {
         conv_2d_resource_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+    } else {
+        assert(false && "Invalid strategy for conv_2d_cl");
     }
+}
+
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void conv_2d_cl(
+    data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan], ac_sync &sync_data,
+    res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt], ac_sync &sync_res,
+    typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
+    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
+{
+  sync_data.sync_in();
+  conv_2d_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+  sync_res.sync_out();
 }
 
 template <class data_T, class res_T, typename CONFIG_T>
 void pointwise_conv_2d_cl(data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan],
                           res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt],
                           typename CONFIG_T::weight_t weights[CONFIG_T::n_chan * CONFIG_T::n_filt],
-                          typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
+                          typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
+{
     assert(CONFIG_T::filt_width == 1);
 
-    if (CONFIG_T::strategy == nnet::latency) {
-        pointwise_conv_2d_latency_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+    // Nothing special to be done for io_parallel implementation
+    if (CONFIG_T::strategy == nnet::latency || CONFIG_T::strategy == nnet::distributed_arithmetic) {
+        conv_2d_latency_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+    // } else if (CONFIG_T::strategy == nnet::resource || CONFIG_T::strategy == nnet::resource_unrolled) {
+    } else if (CONFIG_T::strategy == nnet::resource ) {
+        conv_2d_resource_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
     } else {
-        pointwise_conv_2d_resource_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+        assert(false && "Invalid strategy for pointwise_conv_2d_cl");
     }
+}
+
+#pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T>
+void pointwise_conv_2d_cl(
+        data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan], ac_sync &sync_data,
+        res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt], ac_sync &sync_res,
+        typename CONFIG_T::weight_t weights[CONFIG_T::n_chan * CONFIG_T::n_filt],
+        typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
+{
+  sync_data.sync_in();
+  pointwise_conv_2d_cl<data_T, res_T, CONFIG_T>(data, res, weights, biases);
+  sync_res.sync_out();
 }
 
 } // namespace nnet

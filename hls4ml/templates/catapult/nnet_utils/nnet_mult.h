@@ -1,9 +1,9 @@
 #ifndef NNET_MULT_H_
 #define NNET_MULT_H_
 
-#include "ac_channel.h"
 #include "nnet_common.h"
 #include "nnet_helpers.h"
+#include <ac_channel.h>
 #include <iostream>
 #include <math.h>
 
@@ -25,7 +25,6 @@ template <class x_T, class w_T> class both_binary : public Product {
   public:
     static x_T product(x_T a, w_T w) {
         // specialisation for 1-bit weights and incoming data
-        //#pragma HLS INLINE
         return a == w;
     }
 };
@@ -34,7 +33,6 @@ template <class x_T, class w_T> class weight_binary : public Product {
   public:
     static auto product(x_T a, w_T w) -> decltype(-a) {
         // Specialisation for 1-bit weights, arbitrary data
-        //#pragma HLS INLINE
         if (w == 0)
             return -a;
         else
@@ -46,7 +44,6 @@ template <class x_T, class w_T> class data_binary : public Product {
   public:
     static auto product(x_T a, w_T w) -> decltype(-w) {
         // Specialisation for 1-bit data, arbitrary weight
-        //#pragma HLS INLINE
         if (a == 0)
             return -w;
         else
@@ -58,7 +55,6 @@ template <class x_T, class w_T> class weight_ternary : public Product {
   public:
     static auto product(x_T a, w_T w) -> decltype(-a) {
         // Specialisation for 2-bit weights, arbitrary data
-        //#pragma HLS INLINE
         if (w == 0)
             return 0;
         else if (w == -1)
@@ -72,30 +68,44 @@ template <class x_T, class w_T> class mult : public Product {
   public:
     static auto product(x_T a, w_T w) -> decltype(a * w) {
         // 'Normal' product
-        //#pragma HLS INLINE
         return a * w;
     }
     static void limit(unsigned multiplier_limit) {
-        //#pragma HLS INLINE
-        //#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
     }
 };
 
-template <class x_T, class w_T> class weight_exponential : public Product {
-  public:
-    // Construct the return type from the multiplication equivalent to the largest shifts
-    // ap_int<pow2(decltype(w_T::weight)::width-1)-1> is the type if the multiplicand equivalent to the largest lshift <<
-    // ap_fixed<pow2(decltype(w_T::weight)::width-1)-1,0> is the type of the multiplicand equivalent to the largest rshift >>
-    using r_T = decltype(x_T(0) * (ac_int<pow2(decltype(w_T::weight)::width - 1) - 1, true>(1) +
-                                   ac_fixed<pow2(decltype(w_T::weight)::width - 1) - 1, 0, true>(1)));
-    static r_T product(x_T a, w_T w) {
-        // Shift product for exponential weights
-        //#pragma HLS INLINE
-        // shift by the exponent. Negative weights shift right
-        r_T y = static_cast<r_T>(a) << w.weight;
-        // negate or not depending on weight sign
-        return w.sign == 1 ? y : static_cast<r_T>(-y);
+#include <iostream>
+
+template <class x_T, class w_T>
+class weight_exponential : public Product {
+private:
+  using exp_t = decltype(w_T::weight);  // e.g., ac_int<EW, true>
+  static constexpr int EXP_W = exp_t::width;
+  static constexpr int EMAX  = (1 << (EXP_W - 1)) - 1;
+
+  static constexpr int I_OUT = x_T::i_width + EMAX + 1; // +1 for negation safety
+  static constexpr int W_OUT = I_OUT + (x_T::width - x_T::i_width);
+
+public:
+  using r_T = ac_fixed<W_OUT, I_OUT, true, x_T::q_mode, x_T::o_mode>;
+
+  static r_T product(const x_T& a, const w_T& w) {
+
+    r_T tmp = static_cast<r_T>(a);
+
+    // Perform shift
+    if (w.weight >= 0) {
+      tmp <<= w.weight;
+    } else {
+      tmp >>= -w.weight;
     }
+
+    // Apply sign
+    if (w.sign != 1) {
+      tmp = -tmp;
+    }
+    return tmp;
+  }
 };
 
 } // namespace product

@@ -18,6 +18,7 @@ from hls4ml.model.layers import Layer, layer_map
 from hls4ml.model.optimizer import get_available_passes, optimize_model
 from hls4ml.model.types import Serializable
 from hls4ml.utils.string_utils import convert_to_snake_case
+graph_impl_type = None  # global definition
 
 
 class HLSConfig(Serializable):
@@ -192,8 +193,22 @@ class HLSConfig(Serializable):
         if conv_implementation is None:
             conv_implementation = self.layer_type_conv_implementation.get(layer.__class__.__name__.lower())
         if conv_implementation is None:
-            conv_implementation = self.model_conv_implementation
-
+            conv_impl_type=graph_impl_type
+            if conv_impl_type == 'ac_window':
+                ### TODO: right now only supports filt_height == filter_width and stride_height == stride_width and CatapultConv2D          
+                attributes = layer.attributes  # Access the AttributeDict object
+                if "pointwise" in layer.name:
+                    conv_implementation = 'ac_window'
+                elif (
+                    layer.__class__.__name__ in ("CatapultConv2D", "CatapultDepthwiseConv2D", "CatapultSeparableConv2D")
+                    and attributes.get('filt_height') != 1
+                    and attributes.get('stride_height') == 1
+                ):
+                    conv_implementation = 'ac_window'
+                else:
+                    conv_implementation = self.model_conv_implementation
+            else:
+                conv_implementation = self.model_conv_implementation
         return conv_implementation
 
     def is_resource_strategy(self, layer):
@@ -440,8 +455,8 @@ class ModelGraph(Serializable):
         input_names = _find_output_variable_names(layer_list, input_layers)
         if input_names != input_layers:
             raise RuntimeError(
-                "Currently only support the case when input variables and input layer names match\n"
-                + f"Input layers = {input_layers}, input_vars = {input_names}"
+                'Currently only support the case when input variables and input layer names match\n'
+                + f'Input layers = {input_layers}, input_vars = {input_names}'
             )
         output_names = _find_output_variable_names(layer_list, output_layers)
 
@@ -649,7 +664,6 @@ class ModelGraph(Serializable):
             raise Exception('Cannot delete a node with multiple inputs/outputs')
 
         if len(outputs) == 1 and len(inputs) == 1:
-
             # Connect inputs -> $outputs
             if node.outputs[0] in self.outputs:
                 msg = f'Remove leaf node {node.name} will connect its input node {inputs[0]} to output, but it already is.'
@@ -693,6 +707,11 @@ class ModelGraph(Serializable):
         repl = {old_name: new_name for old_name, new_name in zip(old_node.outputs, new_node.outputs)}
         repl.update({old_name: new_name for old_name, new_name in zip(old_node.inputs, new_node.inputs)})
 
+        for old_output in old_node.outputs:
+            if old_output in self.outputs:
+                new_output = repl[old_output]
+                self.outputs = [new_output if name == old_output else name for name in self.outputs]
+
         for node in self.graph.values():
             for i, n in enumerate(node.inputs):
                 if n in repl:
@@ -702,11 +721,6 @@ class ModelGraph(Serializable):
                     node.outputs[i] = repl[n]
 
         self.graph = OrderedDict((new_node.name, new_node) if k == old_node.name else (k, v) for k, v in self.graph.items())
-
-        old_name = old_node.name
-        if old_name in self.outputs:
-            new_name = new_node.name
-            self.outputs = [new_name if name == old_name else name for name in self.outputs]
 
     def split_node(self, old_node, new_node1, new_node2):
         """Replace an existing node in the graph with two nodes in sequence.
@@ -728,6 +742,11 @@ class ModelGraph(Serializable):
         repl = {old_name: new_name for old_name, new_name in zip(old_node.outputs, new_node2.outputs)}
         repl.update({old_name: new_name for old_name, new_name in zip(old_node.inputs, new_node1.inputs)})
 
+        for old_output in old_node.outputs:
+            if old_output in self.outputs:
+                new_output = repl[old_output]
+                self.outputs = [new_output if name == old_output else name for name in self.outputs]
+
         for node in self.graph.values():
             for i, n in enumerate(node.inputs):
                 if n in repl:
@@ -744,9 +763,6 @@ class ModelGraph(Serializable):
             else:
                 new_graph[key] = value
         self.graph = new_graph
-
-        if old_node.name in self.outputs:
-            self.outputs = [new_node2.name if name == old_node.name else name for name in self.outputs]
 
     def next_layer(self):
         self.index += 1
@@ -803,7 +819,7 @@ class ModelGraph(Serializable):
     def _compile(self):
         lib_name = self.config.backend.compile(self)
         if self._top_function_lib is not None:
-            if platform.system() == "Linux":
+            if platform.system() == 'Linux':
                 libdl_libs = ['libdl.so', 'libdl.so.2']
                 for libdl in libdl_libs:
                     try:
@@ -811,7 +827,7 @@ class ModelGraph(Serializable):
                         break
                     except Exception:
                         continue
-            elif platform.system() == "Darwin":
+            elif platform.system() == 'Darwin':
                 dlclose_func = ctypes.CDLL('libc.dylib').dlclose
 
             dlclose_func.argtypes = [ctypes.c_void_p]
@@ -849,7 +865,7 @@ class ModelGraph(Serializable):
             )
 
         top_function.restype = None
-        top_function.argtypes = [npc.ndpointer(ctype, flags="C_CONTIGUOUS") for i in range(len(xlist) + n_outputs)]
+        top_function.argtypes = [npc.ndpointer(ctype, flags='C_CONTIGUOUS') for i in range(len(xlist) + n_outputs)]
 
         return top_function, ctype
 
@@ -1160,7 +1176,7 @@ class MultiModelGraph:
 
     def _update_project_config(self, first_graph):
         original_project_name = first_graph.config.get_project_name().partition('_graph')[0]
-        self.config.config['ProjectName'] = f"{original_project_name}_stitched"
+        self.config.config['ProjectName'] = f'{original_project_name}_stitched'
         self.config.config['OriginalProjectName'] = original_project_name
         original_output_dir = first_graph.config.get_output_dir().partition('/graph')[0]
         self.config.config['OutputDir'] = os.path.join(original_output_dir, 'stitched')
@@ -1170,13 +1186,13 @@ class MultiModelGraph:
         return self.graphs[index]
 
     def parse_nn_config(self):
-        nn_config = {"inputs": [], "outputs": []}
+        nn_config = {'inputs': [], 'outputs': []}
         nn_config['OutputDir'] = self.config.config['OutputDir']
         nn_config['StitchedProjectName'] = self.config.config['StitchedProjectName']
         nn_config['OriginalProjectName'] = self.config.config['OriginalProjectName']
 
         # Parse layers (inputs and outputs)
-        for graph, io_type in [(self.graphs[0], "inputs"), (self.graphs[-1], "outputs")]:
+        for graph, io_type in [(self.graphs[0], 'inputs'), (self.graphs[-1], 'outputs')]:
             for layer in getattr(graph, io_type):
                 if layer in graph.output_vars:
                     total_bits = 1
@@ -1273,7 +1289,7 @@ class MultiModelGraph:
         if stitch_design or sim_stitched_design or export_stitched_design:
             failed_graphs = [name for name, report in build_results.items() if report is None]
             if failed_graphs:
-                print(f"Skipping stitching. Build failed for the following subgraphs: {', '.join(failed_graphs)}")
+                print(f'Skipping stitching. Build failed for the following subgraphs: {", ".join(failed_graphs)}')
                 return self.graph_reports
 
             self._replace_logos()
@@ -1433,9 +1449,7 @@ class MultiModelGraph:
             }
 
             if ref_pragmas != current_pragmas:
-                raise ValueError(
-                    f'Pragma mismatch in graph {idx}:\n' f'Expected: {ref_pragmas}\n' f'Found: {current_pragmas}'
-                )
+                raise ValueError(f'Pragma mismatch in graph {idx}:\nExpected: {ref_pragmas}\nFound: {current_pragmas}')
 
     def _make_stamp(self):
         length = 8

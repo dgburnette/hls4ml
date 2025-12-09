@@ -1,7 +1,7 @@
 #ifndef X_HLS_MATH_H
 #define X_HLS_MATH_H
 
-#include "ac_fixed.h"
+#include <ac_fixed.h>
 #include <cmath>
 
 namespace hls {
