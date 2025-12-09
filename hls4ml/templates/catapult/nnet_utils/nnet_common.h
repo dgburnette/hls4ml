@@ -2,8 +2,7 @@
 #ifndef NNET_COMMON_H_
 #define NNET_COMMON_H_
 
-#include "nnet_helpers.h"
-#include <ac_fixed.h>
+#include "ac_fixed.h"
 
 // This is a substitute for "ceil(n/(float)d)".
 #define DIV_ROUNDUP(n, d) ((n + d - 1) / d)
@@ -14,7 +13,7 @@ namespace nnet {
 
 // Common type definitions
 enum io_type { io_parallel = 0, io_stream };
-enum strategy { latency, resource, resource_unrolled, distributed_arithmetic };
+enum strategy { latency, resource };
 
 /* ---
  * Balanced tree reduce implementation.

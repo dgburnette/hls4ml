@@ -1,9 +1,9 @@
 #ifndef NNET_BATCHNORM_H_
 #define NNET_BATCHNORM_H_
 
+#include "ac_channel.h"
 #include "nnet_common.h"
 #include "nnet_dense.h"
-#include <ac_channel.h>
 #include <math.h>
 
 namespace nnet {
@@ -30,24 +30,29 @@ struct batchnorm_config {
 template <class data_T, class res_T, typename CONFIG_T>
 void normalize(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in],
                typename CONFIG_T::scale_t scale[CONFIG_T::n_scale_bias],
-               typename CONFIG_T::bias_t bias[CONFIG_T::n_scale_bias]) 
-{
+               typename CONFIG_T::bias_t bias[CONFIG_T::n_scale_bias]) {
     data_T cache;
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
+    //#pragma HLS function_instantiate variable=scale,bias
 
     // For parallel inputs:
     //   - completely partition arrays -- target fabric
     //   - if we have an unroll factor, limit number of multipliers
+    //#pragma HLS PIPELINE II=CONFIG_T::reuse_factor
     constexpr int ce_reuse_factor = CONFIG_T::reuse_factor;
     (void)ce_reuse_factor;
-    #pragma hls_pipeline_init_interval ce_reuse_factor
+
+    // #pragma HLS ARRAY_PARTITION variable=weights complete // remove this line for now, it breaks compression sometimes
+    //#pragma HLS ARRAY_PARTITION variable=scale complete
+    //#pragma HLS ARRAY_PARTITION variable=bias complete
 
     int multiplier_limit = ceil(float(CONFIG_T::n_in) / float(CONFIG_T::reuse_factor));
     CONFIG_T::template product<data_T, typename CONFIG_T::scale_t>::limit(multiplier_limit);
 
-    // Calculate result
-    Result: for (int ires = 0; ires < CONFIG_T::n_in; ires++) {
+    // Calcuate result
+Result:
+    for (int ires = 0; ires < CONFIG_T::n_in; ires++) {
         if (CONFIG_T::n_filt == -1) {
             res[ires] = CONFIG_T::template product<data_T, typename CONFIG_T::scale_t>::product(data[ires], scale[ires]) +
                         bias[ires];
@@ -60,17 +65,6 @@ void normalize(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in],
     }
 }
 
-#pragma hls_design block
-template <class data_T, class res_T, typename CONFIG_T>
-void normalize(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
-               res_T res[CONFIG_T::n_in],ac_sync &sync_res,
-               typename CONFIG_T::scale_t scale[CONFIG_T::n_scale_bias],
-               typename CONFIG_T::bias_t bias[CONFIG_T::n_scale_bias]) 
-{
-  sync_data.sync_in();
-  normalize<data_T, res_T, CONFIG_T>(data, res, scale, bias);
-  sync_res.sync_out();
-}
 // ****************************************************
 //       Merged Batch Normalization and Quantized Tanh
 // ****************************************************
@@ -88,8 +82,10 @@ struct batchnorm_quantized_tanh_config {
 
 template <class data_T, typename CONFIG_T>
 void normalize_binary_tanh(data_T data[CONFIG_T::n_in], ac_int<1, false> res[CONFIG_T::n_in],
-                           data_T threshold[CONFIG_T::n_in]) 
-{
+                           data_T threshold[CONFIG_T::n_in]) {
+    //#pragma HLS PIPELINE
+    //#pragma HLS ARRAY_PARTITION variable=res complete
+
     data_T datareg;
     ac_int<1, false> cache;
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
@@ -104,21 +100,12 @@ void normalize_binary_tanh(data_T data[CONFIG_T::n_in], ac_int<1, false> res[CON
     }
 }
 
-#pragma hls_design block
-template <class data_T, typename CONFIG_T>
-void normalize_binary_tanh(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
-                           ac_int<1, false> res[CONFIG_T::n_in], ac_sync &sync_res,
-                           data_T threshold[CONFIG_T::n_in]) 
-{
-  sync_data.sync_in();
-  normalize_binary_tanh<data_T, CONFIG_T>(data, res, threshold);
-  sync_res.sync_out();
-}
-  
 template <class data_T, typename CONFIG_T>
 void normalize_ternary_tanh(data_T data[CONFIG_T::n_in], ac_int<2, true> res[CONFIG_T::n_in],
-                            data_T threshold_hi[CONFIG_T::n_in], data_T threshold_lo[CONFIG_T::n_in]) 
-{
+                            data_T threshold_hi[CONFIG_T::n_in], data_T threshold_lo[CONFIG_T::n_in]) {
+    //#pragma HLS PIPELINE
+    //#pragma HLS ARRAY_PARTITION variable=res complete
+
     data_T datareg;
     ac_int<2, true> cache;
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
@@ -135,18 +122,6 @@ void normalize_ternary_tanh(data_T data[CONFIG_T::n_in], ac_int<2, true> res[CON
     }
 }
 
-#pragma hls_design block
-template <class data_T, typename CONFIG_T>
-void normalize_ternary_tanh(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
-                            ac_int<2, true> res[CONFIG_T::n_in], ac_sync &sync_res,
-                            data_T threshold_hi[CONFIG_T::n_in], data_T threshold_lo[CONFIG_T::n_in]) 
-{
-  sync_data.sync_in();
-  normalize_ternary_tanh<data_T, CONFIG_T>(data, res, threshold_hi, threshold_lo);
-  sync_res.sync_out();
-}
-
 } // namespace nnet
 
 #endif
-
