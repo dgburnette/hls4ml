@@ -152,10 +152,6 @@ def config_from_keras_model(
     if backend is not None:
         backend = hls4ml.backends.get_backend(backend)
 
-    # HACK for Catapult - disable new bit width calculations by forcing max_precision to be default_precision
-    if max_precision is None:
-        max_precision = default_precision
-
     # This is a list of dictionaries to hold all the layer info we need to generate HLS
     layer_list = []
 
@@ -188,39 +184,6 @@ def config_from_keras_model(
             layer_cls = backend.create_layer_class(layer_cls)
 
         layer_config = {}
-        is_act = 'activation' in layer.keys() and cls_name == "Activation"
-        if is_act:
-            layer_config["LayerClassName"] = layer['activation']
-        else:
-            layer_config["LayerClassName"] = cls_name
-
-        features = [
-            "in_height",
-            "in_width",
-            "n_chan",
-            "n_filt",
-            "filt_height",
-            "filt_width",
-            "pool_height",
-            "pool_width",
-            "stride_height",
-            "stride_width",
-            "pad_top",
-            "pad_bottom",
-            "pad_left",
-            "pad_right",
-            "d_mult",
-            "depth_multiplier",
-        ]
-        non_configs_attrs = [
-            a.name
-            for a in layer_cls.expected_attributes
-            if not a.configurable and a.name in features and a.name in layer.keys()
-        ]
-        if is_act:
-            non_configs_attrs += [
-                a for a in ["in_height", "in_width", "n_chan"] if a not in non_configs_attrs and a in layer.keys()
-            ]
 
         config_attrs = [a for a in layer_cls.expected_attributes if a.configurable]
         for attr in config_attrs:
@@ -238,12 +201,6 @@ def config_from_keras_model(
             else:
                 if attr.default is not None:
                     layer_config[attr.config_name] = attr.default
-
-        if non_configs_attrs:
-            non_cfg_cfg = layer_config.setdefault('NonConfigurable', {})
-        for attr in non_configs_attrs:
-            # non_configs_attrs[attr] existing predicates layer[attr] existing
-            non_cfg_cfg[attr] = layer[attr]
 
         quantizers = {qname: qclass for qname, qclass in layer.items() if 'quantizer' in qname and qclass is not None}
         for qname, qclass in quantizers.items():
@@ -304,9 +261,6 @@ def config_from_keras_model(
     model_config['TraceOutput'] = False
 
     config['Model'] = model_config
-
-    #### the default conv2d implementation is the old hls4ml implementation 
-    config['implementation'] = "hls4ml"
 
     if granularity.lower() == 'type':
         type_config = {}
