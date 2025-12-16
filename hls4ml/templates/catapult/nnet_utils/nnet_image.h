@@ -1,8 +1,8 @@
 #ifndef NNET_IMAGE_H_
 #define NNET_IMAGE_H_
 
-#include "ac_channel.h"
 #include "nnet_common.h"
+#include <ac_channel.h>
 #include <math.h>
 
 namespace nnet {
@@ -22,7 +22,6 @@ void resize_nearest(data_T image[CONFIG_T::height * CONFIG_T::width * CONFIG_T::
     int x_ratio = (int)((CONFIG_T::width << 16) / CONFIG_T::new_width) + 1;
     int x2, y2;
 
-    //#pragma HLS PIPELINE
 
     for (int i = 0; i < CONFIG_T::new_height; i++) {
         for (int j = 0; j < CONFIG_T::new_width; j++) {
@@ -34,6 +33,16 @@ void resize_nearest(data_T image[CONFIG_T::height * CONFIG_T::width * CONFIG_T::
             }
         }
     }
+}
+
+#pragma hls_design block
+template <class data_T, typename CONFIG_T>
+void resize_nearest(data_T image[CONFIG_T::height * CONFIG_T::width * CONFIG_T::n_chan], ac_sync &sync_image,
+                    data_T resized[CONFIG_T::new_height * CONFIG_T::new_width * CONFIG_T::n_chan], ac_sync &sync_resized)
+{
+  sync_image.sync_in();
+  resize_nearest<data_T, CONFIG_T>(image, resized);
+  sync_resized.sync_out();
 }
 
 } // namespace nnet
