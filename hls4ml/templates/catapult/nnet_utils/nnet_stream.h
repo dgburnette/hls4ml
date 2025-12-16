@@ -2,7 +2,7 @@
 #ifndef NNET_STREAM_H
 #define NNET_STREAM_H
 
-#include <ac_channel.h>
+#include "ac_channel.h"
 
 namespace nnet {
 
@@ -15,12 +15,10 @@ struct broadcast_config {
     static const unsigned out_chan = 3;
 };
 
-#pragma hls_design block
-#pragma hls_pipeline_init_interval 1
 template <class data_T, class res_T, int N>
-void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2) 
-{
+void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2) {
 // CloneLoop: for (int i = 0; i < N / data_T::size; i++) {
+//#pragma HLS PIPELINE
 #ifndef __SYNTHESIS__
     while (data.available(1))
 #endif
@@ -28,9 +26,12 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
         data_T in_data = data.read();
         res_T out_data;
         // res_T out_data2;
+        //#pragma HLS DATA_PACK variable=out_data1
+        //#pragma HLS DATA_PACK variable=out_data2
 
-        #pragma hls_unroll
-        ClonePack: for (unsigned int j = 0; j < data_T::size; j++) {
+    ClonePack:
+        for (int j = 0; j < data_T::size; j++) {
+            //#pragma HLS UNROLL
             out_data[j] = in_data[j];
             // out_data2[j] = in_data[j];
         }
@@ -40,12 +41,8 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
     }
 }
 
-#pragma hls_design block
-#pragma hls_pipeline_init_interval 1
 template <class data_T, class res_T, int N>
-void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3) 
-{
-// CloneLoop: for (int i = 0; i < N / data_T::size; i++) {
+void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3) {
 #ifndef __SYNTHESIS__
     while (data.available(1))
 #endif
@@ -53,8 +50,8 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
         data_T in_data = data.read();
         res_T out_data;
 
-        #pragma hls_unroll
-        ClonePack: for (unsigned int j = 0; j < data_T::size; j++) {
+    ClonePack:
+        for (int j = 0; j < data_T::size; j++) {
             out_data[j] = in_data[j];
         }
 
@@ -64,13 +61,9 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
     }
 }
 
-#pragma hls_design block
-#pragma hls_pipeline_init_interval 1
 template <class data_T, class res_T, int N>
-void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3, 
-                  ac_channel<res_T> &res4) 
-{
-// CloneLoop: for (int i = 0; i < N / data_T::size; i++) {
+void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3,
+                  ac_channel<res_T> &res4) {
 #ifndef __SYNTHESIS__
     while (data.available(1))
 #endif
@@ -78,8 +71,8 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
         data_T in_data = data.read();
         res_T out_data;
 
-        #pragma hls_unroll
-        ClonePack: for (unsigned int j = 0; j < data_T::size; j++) {
+    ClonePack:
+        for (int j = 0; j < data_T::size; j++) {
             out_data[j] = in_data[j];
         }
 
@@ -90,13 +83,9 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
     }
 }
 
-#pragma hls_design block
-#pragma hls_pipeline_init_interval 1
 template <class data_T, class res_T, int N>
-void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3, 
-                  ac_channel<res_T> &res4, ac_channel<res_T> &res5) 
-{
-// CloneLoop: for (int i = 0; i < N / data_T::size; i++) {
+void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3,
+                  ac_channel<res_T> &res4, ac_channel<res_T> &res5) {
 #ifndef __SYNTHESIS__
     while (data.available(1))
 #endif
@@ -104,8 +93,8 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
         data_T in_data = data.read();
         res_T out_data;
 
-        #pragma hls_unroll
-        ClonePack: for (unsigned int j = 0; j < data_T::size; j++) {
+    ClonePack:
+        for (int j = 0; j < data_T::size; j++) {
             out_data[j] = in_data[j];
         }
 
@@ -117,13 +106,9 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
     }
 }
 
-#pragma hls_design block
-#pragma hls_pipeline_init_interval 1
 template <class data_T, class res_T, int N>
-void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3, 
-                  ac_channel<res_T> &res4, ac_channel<res_T> &res5, ac_channel<res_T> &res6) 
-{
-// CloneLoop: for (int i = 0; i < N / data_T::size; i++) {
+void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3,
+                  ac_channel<res_T> &res4, ac_channel<res_T> &res5, ac_channel<res_T> &res6) {
 #ifndef __SYNTHESIS__
     while (data.available(1))
 #endif
@@ -131,8 +116,8 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
         data_T in_data = data.read();
         res_T out_data;
 
-        #pragma hls_unroll
-        ClonePack: for (unsigned int j = 0; j < data_T::size; j++) {
+    ClonePack:
+        for (int j = 0; j < data_T::size; j++) {
             out_data[j] = in_data[j];
         }
 
@@ -145,13 +130,9 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
     }
 }
 
-#pragma hls_design block
-#pragma hls_pipeline_init_interval 1
 template <class data_T, class res_T, int N>
-void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3, 
-                  ac_channel<res_T> &res4, ac_channel<res_T> &res5, ac_channel<res_T> &res6, ac_channel<res_T> &res7) 
-{
-// CloneLoop: for (int i = 0; i < N / data_T::size; i++) {
+void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<res_T> &res2, ac_channel<res_T> &res3,
+                  ac_channel<res_T> &res4, ac_channel<res_T> &res5, ac_channel<res_T> &res6, ac_channel<res_T> &res7) {
 #ifndef __SYNTHESIS__
     while (data.available(1))
 #endif
@@ -159,8 +140,8 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
         data_T in_data = data.read();
         res_T out_data;
 
-        #pragma hls_unroll
-        ClonePack: for (unsigned int j = 0; j < data_T::size; j++) {
+    ClonePack:
+        for (int j = 0; j < data_T::size; j++) {
             out_data[j] = in_data[j];
         }
 
@@ -174,18 +155,17 @@ void clone_stream(ac_channel<data_T> &data, ac_channel<res_T> &res1, ac_channel<
     }
 }
 
-#pragma hls_design block
-template <class data_T, class res_T, int N> 
-void repack_stream(ac_channel<data_T> &data, ac_channel<res_T> &res) 
-{
+template <class data_T, class res_T, int N> void repack_stream(ac_channel<data_T> &data, ac_channel<res_T> &res) {
     if (data_T::size == res_T::size) {
         for (int i = 0; i < N / data_T::size; i++) {
+            //#pragma HLS PIPELINE
 
             data_T in_data = data.read();
             res_T out_data;
+            //#pragma HLS DATA_PACK variable=out_data
 
-            #pragma hls_unroll
             for (int j = 0; j < data_T::size; j++) {
+                //#pragma HLS UNROLL
                 out_data[j] = in_data[j];
             }
 
@@ -195,16 +175,19 @@ void repack_stream(ac_channel<data_T> &data, ac_channel<res_T> &res)
         constexpr unsigned pack_diff = data_T::size / res_T::size;
         for (int i = 0; i < N / data_T::size; i++) {
             if (N / data_T::size > 1) {
+                //#pragma HLS PIPELINE
             }
 
             data_T in_data = data.read();
             res_T out_data;
+            //#pragma HLS DATA_PACK variable=out_data
 
             for (int j = 0; j < pack_diff; j++) {
+                //#pragma HLS PIPELINE
 
                 res_T out_data;
-                #pragma hls_unroll
                 for (int k = 0; k < res_T::size; k++) {
+                    //#pragma HLS UNROLL
                     out_data[k] = in_data[j * res_T::size + k];
                 }
                 res.write(out_data);
@@ -215,10 +198,11 @@ void repack_stream(ac_channel<data_T> &data, ac_channel<res_T> &res)
         constexpr unsigned pack_diff = res_T::size / data_T::size;
         unsigned pack_cnt = 0;
         for (int i = 0; i < N / data_T::size; i++) {
+            //#pragma HLS PIPELINE
 
             data_T in_data = data.read();
-            #pragma hls_unroll
             for (int j = 0; j < data_T::size; j++) {
+                //#pragma HLS UNROLL
                 out_data[pack_cnt * data_T::size + j] = in_data[j];
             }
 
@@ -232,20 +216,21 @@ void repack_stream(ac_channel<data_T> &data, ac_channel<res_T> &res)
     }
 }
 
-#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
-void broadcast_stream_1x1xC(ac_channel<data_T> &data, ac_channel<res_T> &res) 
-{
+void broadcast_stream_1x1xC(ac_channel<data_T> &data, ac_channel<res_T> &res) {
     assert(CONFIG_T::in_height == 1 && CONFIG_T::in_width == 1 && CONFIG_T::in_chan == CONFIG_T::out_chan);
     int n_dupl = (CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::out_chan) /
                  (CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::in_chan);
-
-    BroadcastLoop: for (int i = 0; i < CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::in_chan / data_T::size; i++) {
+BroadcastLoop:
+    for (int i = 0; i < CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::in_chan / data_T::size; i++) {
+        //#pragma HLS PIPELINE
         data_T in_data = data.read();
         for (int j = 0; j < n_dupl; j++) {
+            //#pragma HLS PIPELINE
             res_T out_data;
-            #pragma hls_unroll
+            //#pragma HLS DATA_PACK variable=out_data
             for (int k = 0; k < res_T::size; k++) {
+                //#pragma HLS UNROLL
                 out_data[k] = in_data[k];
             }
             res.write(out_data);
@@ -253,18 +238,18 @@ void broadcast_stream_1x1xC(ac_channel<data_T> &data, ac_channel<res_T> &res)
     }
 }
 
-#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
-void broadcast_stream_HxWx1(ac_channel<data_T> &data, ac_channel<res_T> &res) 
-{
+void broadcast_stream_HxWx1(ac_channel<data_T> &data, ac_channel<res_T> &res) {
     assert(CONFIG_T::in_chan == 1 && CONFIG_T::in_height == CONFIG_T::out_height &&
            CONFIG_T::in_width == CONFIG_T::out_width);
-
-    BroadcastLoop: for (int i = 0; i < CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::in_chan / data_T::size; i++) {
+BroadcastLoop:
+    for (int i = 0; i < CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::in_chan / data_T::size; i++) {
+        //#pragma HLS PIPELINE
         data_T in_data = data.read();
         res_T out_data;
-        #pragma hls_unroll
+        //#pragma HLS DATA_PACK variable=out_data
         for (int k = 0; k < res_T::size; k++) {
+            //#pragma HLS UNROLL
             out_data[k] = in_data[0];
         }
         res.write(out_data);
@@ -272,8 +257,7 @@ void broadcast_stream_HxWx1(ac_channel<data_T> &data, ac_channel<res_T> &res)
 }
 
 template <class data_T, class res_T, typename CONFIG_T>
-void broadcast_stream(ac_channel<data_T> &data, ac_channel<res_T> &res) 
-{
+void broadcast_stream(ac_channel<data_T> &data, ac_channel<res_T> &res) {
     if (CONFIG_T::in_height == 1 && CONFIG_T::in_width == 1 && CONFIG_T::in_chan == CONFIG_T::out_chan) {
         broadcast_stream_1x1xC<data_T, res_T, CONFIG_T>(data, res);
     } else if (CONFIG_T::in_chan == 1 && CONFIG_T::in_height == CONFIG_T::out_height &&
@@ -281,7 +265,6 @@ void broadcast_stream(ac_channel<data_T> &data, ac_channel<res_T> &res)
         broadcast_stream_HxWx1<data_T, res_T, CONFIG_T>(data, res);
     }
 }
-
 } // namespace nnet
 
 #endif

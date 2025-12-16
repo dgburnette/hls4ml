@@ -39,6 +39,7 @@ template <class T, int W, int I> void init_sincos_table(T table[1 << (W - I - 3)
 
 template <class T> void sincos_lut(const T &input, T output[2]) {
 
+    #pragma HLS INLINE
 
     // This implementation is based on ac_sincos_lut.h from AC math library
 
@@ -75,6 +76,7 @@ template <class T> void sincos_lut(const T &input, T output[2]) {
     }
 
     // Leaving this commented out makes the table to to BRAM
+    //#pragma HLS ARRAY_PARTITION variable=sincos complete dim=0
 
     typedef ac_int<AP_MAX(T::width - T::iwidth - 3, 1), false> lutindextype1;
     // Extracting (MSB-3:LSB) bits of scaled input to determine the lookup table index
@@ -156,6 +158,7 @@ template <class T> void sincos_lut(const T &input, T output[2]) {
 }
 
 template <class T> T sin_lut(const T input) {
+    #pragma HLS INLINE
     T sincos_res[2];
     T scaled_input = input * ac_fixed<16, 0, false>(0.15915494309); // 1/(2*pi)
     sincos_lut(scaled_input, sincos_res);
@@ -163,6 +166,7 @@ template <class T> T sin_lut(const T input) {
 }
 
 template <class T> T cos_lut(const T input) {
+    #pragma HLS INLINE
     T sincos_res[2];
     T scaled_input = input * ac_fixed<16, 0, false>(0.15915494309); // 1/(2*pi)
     sincos_lut(scaled_input, sincos_res);

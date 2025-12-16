@@ -1,10 +1,10 @@
 #ifndef NNET_RECR_ACTIVATION_H_
 #define NNET_RECR_ACTIVATION_H_
 
+#include "ac_channel.h"
 #include "nnet_activation.h"
 #include "nnet_common.h"
 #include "nnet_helpers.h"
-#include <ac_channel.h>
 #include <math.h>
 
 namespace nnet {
