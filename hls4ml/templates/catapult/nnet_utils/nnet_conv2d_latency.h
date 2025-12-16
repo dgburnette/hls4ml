@@ -13,12 +13,12 @@ int compute_multiplier_limit_conv2d(typename CONFIG_T::weight_t weights[CONFIG_T
                                                                         CONFIG_T::n_chan * CONFIG_T::n_filt]) {
     int n_mult = 0;
 
-    for (int oh = 0; oh < CONFIG_T::out_height; oh++) {
-        for (int ow = 0; ow < CONFIG_T::out_width; ow++) {
-            for (int ff = 0; ff < CONFIG_T::n_filt; ff++) {
-                for (int cc = 0; cc < CONFIG_T::n_chan; cc++) {
-                    for (int fh = 0; fh < CONFIG_T::filt_height; fh++) {
-                        for (int fw = 0; fw < CONFIG_T::filt_width; fw++) {
+    for (unsigned int oh = 0; oh < CONFIG_T::out_height; oh++) {
+        for (unsigned int ow = 0; ow < CONFIG_T::out_width; ow++) {
+            for (unsigned int ff = 0; ff < CONFIG_T::n_filt; ff++) {
+                for (unsigned int cc = 0; cc < CONFIG_T::n_chan; cc++) {
+                    for (unsigned int fh = 0; fh < CONFIG_T::filt_height; fh++) {
+                        for (unsigned int fw = 0; fw < CONFIG_T::filt_width; fw++) {
 
                             int index_weight = fh * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt +
                                                fw * CONFIG_T::n_chan * CONFIG_T::n_filt + cc * CONFIG_T::n_filt + ff;
@@ -42,8 +42,7 @@ int compute_multiplier_limit_conv2d(typename CONFIG_T::weight_t weights[CONFIG_T
         }                 // end output width loop
     }                     // end output height loop
 
-    // return ceil(float(n_mult) / float(CONFIG_T::reuse_factor));
-    return (n_mult + CONFIG_T::reuse_factor - 1) / CONFIG_T::reuse_factor;
+    return DIV_ROUNDUP(n_mult, CONFIG_T::reuse_factor);
 
 } // end compute_n_mult
 
@@ -58,19 +57,13 @@ void conv_2d_latency_cf(
                                     CONFIG_T::filt_height * CONFIG_T::filt_width];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=mult complete dim=0
-    //#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=weights,biases
 
     // Parallel mode
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=biases complete dim=0
 
     // Limit multipliers to control parallelization
     const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
-//#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
 // Convolve, saving all multiplication results to accumulate later
 ConvOutHeight:
@@ -177,37 +170,32 @@ void conv_2d_latency_cl(
     typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
     typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) {
 
+// OLD
+#if 1
     typename CONFIG_T::accum_t mult[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan *
                                     CONFIG_T::filt_height * CONFIG_T::filt_width];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=mult complete dim=0
-    //#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=weights,biases
 
     // Parallel mode
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=biases complete dim=0
-
     // Limit multipliers to control parallelization
     const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
-//#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
 // Convolve, saving all multiplication results to accumulate later
 ConvOutHeight:
-    for (int oh = 0; oh < CONFIG_T::out_height; oh++) {
+    for (unsigned int oh = 0; oh < CONFIG_T::out_height; oh++) {
     ConvOutWidth:
-        for (int ow = 0; ow < CONFIG_T::out_width; ow++) {
+        for (unsigned int ow = 0; ow < CONFIG_T::out_width; ow++) {
         ConvFilt:
-            for (int ff = 0; ff < CONFIG_T::n_filt; ff++) {
+            for (unsigned int ff = 0; ff < CONFIG_T::n_filt; ff++) {
             ConvChan:
-                for (int cc = 0; cc < CONFIG_T::n_chan; cc++) {
+                for (unsigned int cc = 0; cc < CONFIG_T::n_chan; cc++) {
                 ConvFiltHeight:
-                    for (int fh = 0; fh < CONFIG_T::filt_height; fh++) {
+                    for (unsigned int fh = 0; fh < CONFIG_T::filt_height; fh++) {
                     ConvFiltWidth:
-                        for (int fw = 0; fw < CONFIG_T::filt_width; fw++) {
+                        for (unsigned int fw = 0; fw < CONFIG_T::filt_width; fw++) {
 
                             int index_mult =
                                 oh * CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan * CONFIG_T::filt_height *
@@ -240,9 +228,9 @@ ConvOutHeight:
     }                     // end output height loop
 
     // Initialize accumulator with input biases
-    for (int oh = 0; oh < CONFIG_T::out_height; oh++) {
-        for (int ow = 0; ow < CONFIG_T::out_width; ow++) {
-            for (int ff = 0; ff < CONFIG_T::n_filt; ff++) {
+    for (unsigned int oh = 0; oh < CONFIG_T::out_height; oh++) {
+        for (unsigned int ow = 0; ow < CONFIG_T::out_width; ow++) {
+            for (unsigned int ff = 0; ff < CONFIG_T::n_filt; ff++) {
                 acc[oh * CONFIG_T::out_width * CONFIG_T::n_filt + ow * CONFIG_T::n_filt + ff] = biases[ff];
             }
         }
@@ -250,18 +238,18 @@ ConvOutHeight:
 
 // Accumulate multiplication result
 AccumOutHeight:
-    for (int oh = 0; oh < CONFIG_T::out_height; oh++) {
+    for (unsigned int oh = 0; oh < CONFIG_T::out_height; oh++) {
     AccumOutWidth:
         for (int ow = 0; ow < CONFIG_T::out_width; ow++) {
         AccumFilt:
-            for (int ff = 0; ff < CONFIG_T::n_filt; ff++) {
+            for (unsigned int ff = 0; ff < CONFIG_T::n_filt; ff++) {
             // Do "dot product" sum within filter and sum over channels
             AccumChan:
-                for (int cc = 0; cc < CONFIG_T::n_chan; cc++) {
+                for (unsigned int cc = 0; cc < CONFIG_T::n_chan; cc++) {
                 AccumDotHeight:
-                    for (int fh = 0; fh < CONFIG_T::filt_height; fh++) {
+                    for (unsigned int fh = 0; fh < CONFIG_T::filt_height; fh++) {
                     AccumDotWidth:
-                        for (int fw = 0; fw < CONFIG_T::filt_width; fw++) {
+                        for (unsigned int fw = 0; fw < CONFIG_T::filt_width; fw++) {
 
                             int index_mult =
                                 oh * CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan * CONFIG_T::filt_height *
@@ -281,17 +269,86 @@ AccumOutHeight:
     }                     // end output height loop
 
     // Cast to "res_t" type
-    for (int oh = 0; oh < CONFIG_T::out_height; oh++) {
-        for (int ow = 0; ow < CONFIG_T::out_width; ow++) {
-            for (int ff = 0; ff < CONFIG_T::n_filt; ff++) {
+    for (unsigned int oh = 0; oh < CONFIG_T::out_height; oh++) {
+        for (unsigned int ow = 0; ow < CONFIG_T::out_width; ow++) {
+            for (unsigned int ff = 0; ff < CONFIG_T::n_filt; ff++) {
                 int index = oh * CONFIG_T::out_width * CONFIG_T::n_filt + ow * CONFIG_T::n_filt + ff;
                 res[index] = (res_T)(acc[index]);
             }
         }
     }
 
-} // end conv2d
+#else
+// NEW
+    constexpr unsigned mult_n_in = CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan;
+    constexpr unsigned mult_n_out = CONFIG_T::n_filt;
 
+    data_T data_buf[CONFIG_T::n_pixels][mult_n_in];
+    typename CONFIG_T::accum_t mult[mult_n_in * mult_n_out];
+    typename CONFIG_T::accum_t acc[mult_n_out];
+
+    // Limit multipliers to control parallelization
+    const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
+
+    constexpr int ce_reuse_factor = CONFIG_T::reuse_factor;
+    (void)ce_reuse_factor;
+
+#pragma hls_pipeline_init_interval ce_reuse_factor
+PartitionLoop:
+    for (int i_part = 0; i_part < CONFIG_T::n_partitions; i_part++) {
+
+        CONFIG_T::template fill_buffer<data_T, CONFIG_T>::fill_buffer(data, data_buf, i_part);
+
+    #pragma hls_unroll
+    PixelLoop:
+        for (unsigned i_pxl = 0; i_pxl < CONFIG_T::n_pixels; i_pxl++) {
+
+            data_T cache;
+
+        // Do the matrix-multiply
+        #pragma hls_unroll
+        Product1:
+            for (int i_in = 0; i_in < mult_n_in; i_in++) {
+                cache = data_buf[i_pxl][i_in];
+            #pragma hls_unroll
+            Product2:
+                for (int i_out = 0; i_out < mult_n_out; i_out++) {
+                    mult[i_in * mult_n_out + i_out] =
+                        CONFIG_T::mult_config::template product<data_T, typename CONFIG_T::mult_config::weight_t>::product(
+                            cache, weights[i_in * mult_n_out + i_out]);
+                }
+            }
+
+        // Initialize accumulator with input biases
+        #pragma hls_unroll
+        ResetAccum:
+            for (int i_acc = 0; i_acc < mult_n_out; i_acc++) {
+                acc[i_acc] = (typename CONFIG_T::accum_t)biases[i_acc];
+            }
+
+        // Accumulate multiplication result
+        #pragma hls_unroll
+        Accum1:
+            for (int i_in = 0; i_in < mult_n_in; i_in++) {
+            #pragma hls_unroll
+            Accum2:
+                for (int i_out = 0; i_out < mult_n_out; i_out++) {
+                    acc[i_out] += mult[i_in * mult_n_out + i_out];
+                }
+            }
+
+        // Cast to "res_t" type
+        #pragma hls_unroll
+        Result:
+            for (int i_res = 0; i_res < mult_n_out; i_res++) {
+                *(res++) = cast<data_T, res_T, typename CONFIG_T::mult_config>(acc[i_res]);
+            }
+        }
+    }
+#endif
+}
+
+  //#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
 void pointwise_conv_2d_latency_cl(data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan],
                                   res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt],
@@ -301,19 +358,13 @@ void pointwise_conv_2d_latency_cl(data_T data[CONFIG_T::in_height * CONFIG_T::in
     typename CONFIG_T::accum_t mult[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt * CONFIG_T::n_chan];
     typename CONFIG_T::accum_t acc[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt];
 
-    //#pragma HLS ARRAY_PARTITION variable=mult complete dim=0
-    //#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
 
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
-    //#pragma HLS function_instantiate variable=weights,biases
 
     // Parallel mode
-    //#pragma HLS PIPELINE
-    //#pragma HLS ARRAY_PARTITION variable=biases complete dim=0
 
     // Limit multipliers to control parallelization
     const int multiplier_limit = compute_multiplier_limit_conv2d<CONFIG_T>(weights);
-//#pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
 // Convolve, saving all multiplication results to accumulate later
 ConvOutHeight:

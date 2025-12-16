@@ -2,11 +2,13 @@
 #define MYPROJECT_BRIDGE_H_
 
 #include "firmware/myproject.h"
-#include "nnet_helpers.h"
+#include "nnet_utils/nnet_helpers.h"
 #include <algorithm>
 #include <map>
+#include <ac_shared.h>
+#include <ac_sync.h>
 
-// hls-fpga-machine-learning insert weights dir
+static std::string s_weights_dir = "weights";
 
 const char *get_weights_dir() { return s_weights_dir.c_str(); }
 
@@ -58,6 +60,13 @@ void collect_trace_output(struct trace_data *c_trace_outputs) {
 void myproject_float(
     // hls-fpga-machine-learning insert header #float
 ) {
+    // hls-fpga-machine-learning insert namespace
+
+    static bool loaded_weights = false;
+    if (!loaded_weights) {
+        // hls-fpga-machine-learning insert load weights
+        loaded_weights = true;
+    }
 
     // hls-fpga-machine-learning insert wrapper #float
 }
@@ -65,6 +74,14 @@ void myproject_float(
 void myproject_double(
     // hls-fpga-machine-learning insert header #double
 ) {
+    // hls-fpga-machine-learning insert namespace
+
+    static bool loaded_weights = false;
+    if (!loaded_weights) {
+        // hls-fpga-machine-learning insert load weights
+        loaded_weights = true;
+    }
+
     // hls-fpga-machine-learning insert wrapper #double
 }
 }

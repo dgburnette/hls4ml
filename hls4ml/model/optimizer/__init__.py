@@ -72,7 +72,6 @@ register_flow(
         'fuse_bias_add',
         'expand_time_distributed',
         'expand_layer_group',
-        'output_rounding_saturation_mode',
         'qkeras_factorize_alpha',
         'extract_ternary_threshold',
         'fuse_consecutive_batch_normalization',
@@ -83,9 +82,10 @@ register_flow(
         'fuse_fixed_point_quantizer',
         'fix_input_precision',
         'eliminate_linear_activation',
-        'merge_linear_activation',
+        # 'merge_linear_activation',
         # many of the above optimzers need to be done before this
         'infer_precision_types',
+        'output_rounding_saturation_mode',
     ],
     requires=['parse_qonnx'],
 )  # TODO Maybe not all QKeras optmizers belong here?

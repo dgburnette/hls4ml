@@ -50,6 +50,8 @@ class OutputRoundingSaturationMode(ConfigurableOptimizerPass):
                 self.saturation_bits,
             )
         else:  # in case the precision is a string
+            print('Warning: output variable ' + node.get_output_variable().name + ' type assumed to be a string')
+            print(old_precision.__class__)
             new_precision = self.precision_string_modify(old_precision)
 
         out_var = node.get_output_variable()

@@ -1,5 +1,7 @@
 import numpy as np
 
+implementation_type = None  # global definition
+
 from hls4ml.model.types import (
     CompressedType,
     ExponentPrecisionType,
@@ -243,14 +245,42 @@ class ExponentTypeConverter(TypeDefinition, TypePrecisionConverter):
         self.sign = precision_converter.convert(self.sign)
 
 
+# class PackedTypeConverter(TypeDefinition, TypePrecisionConverter):
+#    def definition_cpp(self):
+#        n_elem_expr = '/' if self.unpack else '*'
+#        return 'typedef nnet::array<{precision}, {n_elem}> {name};\n'.format(
+#            name=self.name,
+#            precision=self.precision.definition_cpp(),
+#            n_elem=str(self.n_elem) + n_elem_expr + str(self.n_pack),
+#        )
+
+
+# from hls4ml.writer.catapult_writer import global_implementation_type
 class PackedTypeConverter(TypeDefinition, TypePrecisionConverter):
     def definition_cpp(self):
-        n_elem_expr = '/' if self.unpack else '*'
-        return 'typedef nnet::array<{precision}, {n_elem}> {name};\n'.format(
-            name=self.name,
-            precision=self.precision.definition_cpp(),
-            n_elem=str(self.n_elem) + n_elem_expr + str(self.n_pack),
-        )
+        impl_type = implementation_type
+        # print(f"[DEBUG] implementation_type in PackedTypeConverter: {impl_type}")
+        is_ac_array = impl_type == 'ac_window'
+
+        # Clean up "*1" or "/1" expression
+        if self.n_pack == 1:
+            n_elem_inner = str(self.n_elem)
+        else:
+            n_elem_inner = f'{self.n_elem}*1' if not self.unpack else f'{self.n_elem}/1'
+
+        if is_ac_array:
+            return (
+                f'typedef ac_array<ac_packed_vector<{self.precision.definition_cpp()}, {n_elem_inner}>, '
+                f'AC_BUS_WORDS> {self.name};\n'
+            )
+        else:
+            n_elem_expr = '/' if self.unpack else '*'
+            if self.n_pack == 1:
+                n_elem_str = str(self.n_elem)
+            else:
+                n_elem_str = f'{self.n_elem}{n_elem_expr}{self.n_pack}'
+
+            return f'typedef nnet::array<{self.precision.definition_cpp()}, {n_elem_str}> {self.name};\n'
 
 
 class HLSTypeConverter:
