@@ -253,6 +253,7 @@ class CatapultBackend(FPGABackend):
         tech='fpga',
         part='xcvu13p-flga2577-2-e',
         asiclibs='nangate-45nm_beh',
+        asiclibspath=None,
         asicfifo='hls4ml_lib.mgc_pipe_mem',
         asicram='ccs_sample_mem.ccs_ram_sync_1R1W',
         fifo=None,
@@ -287,6 +288,7 @@ class CatapultBackend(FPGABackend):
             tech (str, optional): The target technology type. One of 'asic' or 'fpga'.
             part (str, optional): The FPGA part to be used. Defaults to 'xcvu13p-flga2577-2-e'.
             asiclibs (str, optional): The list of ASIC Catapult libraries to load. Defaults to 'nangate-45nm_beh'.
+            asiclibspath (str, optional): The list of paths for ASIC Catapult libraries to load. Defaults to None.
             asicfifo (str, optional): The name of the ASIC FIFO library module to use. Defaults to 'hls4ml_lib.mgc_pipe_mem'.
             asicram (str, optional): The name of the ASIC RAM library module to use.
                 Defaults to 'ccs_sample_mem.ccs_ram_sync_1R1W'.
@@ -335,6 +337,7 @@ class CatapultBackend(FPGABackend):
             config['Part'] = part if part is not None else 'xcvu13p-flga2577-2-e'
         else:
             config['ASICLibs'] = asiclibs if asiclibs is not None else 'nangate-45nm_beh'
+            config['ASICLibsPath'] = asiclibspath
         config['ASICFIFO'] = asicfifo
         config['ASICRAM'] = asicram
         config['ClockPeriod'] = clock_period if clock_period is not None else 5
