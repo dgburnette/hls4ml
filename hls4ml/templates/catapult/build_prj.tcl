@@ -76,10 +76,15 @@ proc setup_xilinx_part { part } {
 }
 
 
-proc setup_asic_libs { args } {
+proc setup_asic_libs { libargs pathargs } {
   global env
   set do_saed 0
-  foreach lib $args {
+
+  foreach path $pathargs {
+      solution options set ComponentLibs/SearchPath $path -append
+  }
+
+  foreach lib $libargs {
     solution library add $lib -- -rtlsyntool DesignCompiler
     if { [lsearch -exact {saed32hvt_tt0p78v125c_beh saed32lvt_tt0p78v125c_beh saed32rvt_tt0p78v125c_beh} $lib] != -1 } {
       set do_saed 1

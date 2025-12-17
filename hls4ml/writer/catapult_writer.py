@@ -1281,10 +1281,10 @@ class CatapultWriter(Writer):
                         if model.config.get_config_value('Part') is not None:
                             line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
                         elif model.config.get_config_value('ASICLibs') is not None:
-                            line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
+                            line = indent + 'setup_asic_libs {{{}}} {{{}}}\n'.format(model.config.get_config_value('ASICLibs'), model.config.get_config_value('ASICLibsPath'))
                     else:
                         if model.config.get_config_value('Technology') == 'asic':
-                            line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
+                            line = indent + 'setup_asic_libs {{{}}} {{{}}}\n'.format(model.config.get_config_value('ASICLibs'), model.config.get_config_value('ASICLibsPath'))
                         else:
                             line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
 
@@ -1383,10 +1383,10 @@ class CatapultWriter(Writer):
                             if model.config.get_config_value('Part') is not None:
                                 line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
                             elif model.config.get_config_value('ASICLibs') is not None:
-                                line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
+                                line = indent + 'setup_asic_libs {{{}}} {{{}}}\n'.format(model.config.get_config_value('ASICLibs'), model.config.get_config_value('ASICLibsPath'))
                         else:
                             if model.config.get_config_value('Technology') == 'asic':
-                                line = indent + 'setup_asic_libs {{{}}}\n'.format(model.config.get_config_value('ASICLibs'))
+                                line = indent + 'setup_asic_libs {{{}}} {{{}}}\n'.format(model.config.get_config_value('ASICLibs'), model.config.get_config_value('ASICLibsPath'))
                             else:
                                 line = indent + 'setup_xilinx_part {{{}}}\n'.format(model.config.get_config_value('Part'))
                     elif '#hls-fpga-machine-learning insert invoke_args' in line:
