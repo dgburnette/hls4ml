@@ -25,12 +25,12 @@ mult_config_template = """struct config{index}_{mNum} : nnet::dense_config {{
 
 softmax_config_template = """struct {type}_config{index} : nnet::activ_config {{
     static const unsigned n_in = {n_in};
-    static const unsigned table_size = {table_size};
+    static const unsigned n_slice = {n_slice};
+    static const unsigned exp_table_size = {exp_table_size};
+    static const unsigned inv_table_size = {inv_table_size};
     static const unsigned io_type = nnet::{iotype};
     static const unsigned reuse_factor = {reuse};
     static const nnet::softmax_implementation implementation = nnet::softmax_implementation::{implementation};
-    typedef {table_t.name} exp_table_t;
-    typedef {table_t.name} inv_table_t;
 }};\n"""
 
 # Multi Head Attention templates
@@ -116,7 +116,13 @@ class MhaConfigTemplate(LayerConfigTemplate):
         act_params = self._default_config_params(node)
         act_params['n_in'] = node.get_attr('seq_len')
         act_params['type'] = 'softmax'
-        act_params['implementation'] = 'legacy'  # in MHA: latency,stable not work， legacy works
+        act_params.setdefault('exp_table_size', act_params['table_size'])
+        act_params.setdefault('inv_table_size', act_params['table_size'])
+        act_params['implementation'] = 'stable'  # in MHA: latency,stable not work， legacy works --> it worked for us so using stable
+        act_params.setdefault('n_inner', 1)
+        act_params.setdefault('n_outer', 1)
+        n_slice = act_params['n_in'] // act_params['n_inner'] // act_params['n_outer']  # type: ignore
+        act_params['n_slice'] = n_slice
         act_config = self.activ1_template.format(**act_params)
 
         return mult_config1 + '\n' + mult_config2 + '\n' + act_config + '\n' + mha_config

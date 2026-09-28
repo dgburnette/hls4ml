@@ -50,6 +50,19 @@ activ_config_template = """struct {type}_config{index} : nnet::activ_config {{
     typedef {table_t.name} table_t;
 }};\n"""
 
+hard_activ_config_template = """struct {type}_config{index} {{
+    static const unsigned n_in = {n_in};
+    static const {slope_t.name} slope;
+    static const {shift_t.name} shift;
+    static const unsigned io_type = nnet::{iotype};
+    static const unsigned reuse_factor = {reuse};
+}};
+// really this allocation of pixels array ought to be in a .cpp file
+#ifndef INCLUDED_MC_TESTBENCH_H
+const {slope_t.name} {type}_config{index}::slope = {slope};
+const {shift_t.name} {type}_config{index}::shift = {shift};
+#endif\n"""
+
 recr_activ_config_template = """struct {type}_config{index}_recr : nnet::activ_config {{
     static const unsigned n_in = {n_in};
     static const unsigned table_size = {table_size};
@@ -57,6 +70,23 @@ recr_activ_config_template = """struct {type}_config{index}_recr : nnet::activ_c
     static const unsigned reuse_factor = {reuse};
     typedef {table_t.name} table_t;
 }};\n"""
+
+hard_recr_activ_config_template = """struct {type}_config{index}_recr {{
+    static const unsigned n_in = {n_in};
+    static const {recr_slope_t.name} slope;
+    static const {recr_shift_t.name} shift;
+    static const unsigned io_type = nnet::{iotype};
+    static const unsigned reuse_factor = {reuse};
+}};
+// really this allocation of pixels array ought to be in a .cpp file
+#ifndef INCLUDED_MC_TESTBENCH_H
+const {recr_slope_t.name} {type}_config{index}_recr::slope = {recr_slope};
+const {recr_shift_t.name} {type}_config{index}_recr::shift = {recr_shift};
+#endif\n"""
+
+
+def _is_hard_activation(activation_type):
+    return activation_type in ('hard_sigmoid', 'hard_tanh')
 
 # LSTM + GRU templates
 
@@ -188,8 +218,15 @@ class RecurrentConfigTemplate(LayerConfigTemplate):
             act_params['n_in'] = node.get_output_variable().shape[0]
             recr_act_params['n_in'] = node.get_output_variable().shape[0] * (n_recr_mult - 1)
 
-        act_config = self.act_template.format(**act_params)
-        recr_act_config = self.recr_act_template.format(**recr_act_params)
+        act_template = hard_activ_config_template if _is_hard_activation(act_params['type']) else self.act_template
+        act_config = act_template.format(**act_params)
+
+        recr_act_template = (
+            hard_recr_activ_config_template
+            if _is_hard_activation(recr_act_params['type'])
+            else self.recr_act_template
+        )
+        recr_act_config = recr_act_template.format(**recr_act_params)
 
         mult_params1 = self._default_config_params(node)
         mult_params2 = self._default_config_params(node)
@@ -331,8 +368,15 @@ class BidirectionalConfigTemplate(LayerConfigTemplate):
             act_params['n_in'] = node.get_attr(f'{d}_n_states')
             recr_act_params['n_in'] = node.get_attr(f'{d}_n_states') * (n_recr_mult - 1)
 
-            act_config = self.act_template.format(**act_params)
-            recr_act_config = self.recr_act_template.format(**recr_act_params)
+            act_template = hard_activ_config_template if _is_hard_activation(act_params['type']) else self.act_template
+            act_config = act_template.format(**act_params)
+
+            recr_act_template = (
+                hard_recr_activ_config_template
+                if _is_hard_activation(recr_act_params['type'])
+                else self.recr_act_template
+            )
+            recr_act_config = recr_act_template.format(**recr_act_params)
 
             # ----- Mult Config -----#
             mult_params1 = self._default_config_params(node)

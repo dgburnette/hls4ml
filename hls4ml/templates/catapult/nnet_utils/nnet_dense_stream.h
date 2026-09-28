@@ -25,6 +25,12 @@ void dense_wrapper(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_out],
 
 #pragma hls_design
 #pragma hls_pipeline_init_interval 1
+#pragma hls_resource weights.weight:rsc variable="weights.weight" map_to_module="[DirectInput]"
+#pragma hls_resource weights.sign:rsc variable="weights.sign" map_to_module="[DirectInput]"
+#pragma hls_resource biases.weight:rsc variable="biases.weight" map_to_module="[DirectInput]"
+#pragma hls_resource biases.sign:rsc variable="biases.sign" map_to_module="[DirectInput]"
+#pragma hls_resource weights:rsc variable="weights" map_to_module="[DirectInput]"
+#pragma hls_resource biases:rsc variable="biases" map_to_module="[DirectInput]"
 template <class data_T, class res_T, typename CONFIG_T>
 void dense(ac_channel<data_T> &data_stream, ac_channel<res_T> &res_stream,
            typename CONFIG_T::weight_t weights[CONFIG_T::n_in * CONFIG_T::n_out],

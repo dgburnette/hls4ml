@@ -39,6 +39,16 @@ template <class data_T, class res_T, typename CONFIG_T> class sigmoid : public A
     }
 };
 
+  template <class data_T, class res_T, typename CONFIG_T> class hard_sigmoid : public Activation<data_T, res_T, CONFIG_T> {
+    public:
+    // *************************************************
+    //       Hard Sigmoid Activation
+    // *************************************************
+    static void activation(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+      nnet::hard_sigmoid<data_T, res_T, CONFIG_T>(data, res);
+    }
+  };
+
 template <class data_T, class res_T, typename CONFIG_T> class tanh : public Activation<data_T, res_T, CONFIG_T> {
   public:
     // *************************************************

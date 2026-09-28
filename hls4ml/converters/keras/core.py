@@ -77,6 +77,7 @@ def parse_activation_layer(keras_layer, input_names, input_shapes, data_reader):
         layer['activ_param'] = keras_layer['config'].get('alpha', 1.0)
     elif layer['class_name'] == 'ReLU':
         layer['class_name'] = 'Activation'
+        layer['activ_param'] = [keras_layer['config'].get('max_value', None), keras_layer['config'].get('negative_slope', 0.0), keras_layer['config'].get('threshold', 0.0)]
     elif layer['class_name'] == 'PReLU':
         if keras_layer['config'].get('shared_axes') is not None:
             raise Exception('PReLU with shared_axes other than None is not supported in hsl4ml')
@@ -92,6 +93,8 @@ def parse_activation_layer(keras_layer, input_names, input_shapes, data_reader):
         layer['class_name'] = 'LeakyReLU'
         # The parameter name changes for API v3; the default is different than in LeakyReLU layer
         layer['activ_param'] = keras_layer['config'].get('negative_slope', keras_layer['config'].get('alpha', 0.2))
+    if layer['class_name'] == 'Activation' and layer['activation'] == 'relu':
+        layer['activ_param'] = [keras_layer['config'].get('max_value', None), keras_layer['config'].get('negative_slope', 0.0), keras_layer['config'].get('threshold', 0.0)]
 
     return layer, [shape for shape in input_shapes[0]]
 

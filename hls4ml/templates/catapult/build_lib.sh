@@ -8,27 +8,31 @@ elif [[ "$OSTYPE" == "linux"* ]]; then
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     CFLAGS="-O3 -fPIC -std=c++17"
 fi
+#hls-fpga-machine-learning insert pe-cflags
 LDFLAGS=
 
 # Pick up AC libraries from Catapult install first
 INCFLAGS="-I$MGC_HOME/shared/include -I$MGC_HOME/shared/include/nnet_utils -Ifirmware/ac_types/include -Ifirmware/ac_math/include -Ifirmware/ac_simutils/include -Ifirmware/ac_ipl/include -Ifirmware/nnet_utils -Ifirmware"
+#hls-fpga-machine-learning insert pe-incflags
 PROJECT=myproject
 LIB_STAMP=mystamp
+#hls-fpga-machine-learning insert pe-vars
 # For proper execution of the shared library from within Python, define the weights dir location
 BASEDIR="$(cd "$(dirname "$0")" && pwd)"
 WEIGHTS_DIR="\"${BASEDIR}/firmware/weights\""
 
 
 echo "build_lib.sh: Creating shared library for execution from Python"
+#hls-fpga-machine-learning insert pe-compile
 ${CC} ${CFLAGS} ${INCFLAGS} -D WEIGHTS_DIR="${WEIGHTS_DIR}" -c firmware/${PROJECT}.cpp -o ${PROJECT}.o
 ${CC} ${CFLAGS} ${INCFLAGS} -D WEIGHTS_DIR="${WEIGHTS_DIR}" -c ${PROJECT}_bridge.cpp -o ${PROJECT}_bridge.o
-${CC} ${CFLAGS} ${INCFLAGS} -shared ${PROJECT}.o ${PROJECT}_bridge.o -o firmware/${PROJECT}-${LIB_STAMP}.so
+${CC} ${CFLAGS} ${INCFLAGS} -shared ${PROJECT}.o ${PROJECT}_bridge.o ${PE_OBJECTS} -o firmware/${PROJECT}-${LIB_STAMP}.so
 rm -f *.o
 
 if [ -d "$MGC_HOME/shared/include/nnet_utils" ]; then
   echo "build_lib.sh: Creating standalone C++ testbench executable"
   rm -f ${PROJECT}.exe
-  ${CC} -std=c++17 -g ${INCFLAGS} firmware/${PROJECT}.cpp ${PROJECT}_test.cpp -o ${PROJECT}.exe
+  ${CC} -std=c++17 -g ${TB_EXTRA_CFLAGS} ${INCFLAGS} ${PE_CSRCS} firmware/${PROJECT}.cpp ${PROJECT}_test.cpp -o ${PROJECT}.exe
   echo ""
   echo "To run the C++ testbench standalone:"
   echo "  ${PROJECT}.exe ./firmware/weights ./tb_data/tb_input_features.dat ./tb_data/tb_output_predictions.dat"

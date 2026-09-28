@@ -12,6 +12,7 @@ import numpy as np
 import yaml
 
 from hls4ml.backends import get_backend
+from hls4ml.model.types import ExponentPrecisionType, FixedPrecisionType, IntegerPrecisionType, XnorPrecisionType
 from hls4ml.writer.writers import Writer
 write_impl_type = None  # global definition
 
@@ -85,6 +86,14 @@ class CatapultWriter(Writer):
             os.makedirs(f'{model.config.get_output_dir()}/firmware/weights')
 
     @staticmethod
+    def _catapult_template_root(architecture):
+        return 'pe' if CatapultWriter._is_pe_architecture(architecture) else ''
+
+    def _catapult_template_path(self, architecture, *parts):
+        filedir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(filedir, '../templates/catapult', self._catapult_template_root(architecture), *parts)
+
+    @staticmethod
     def _make_array_pragma(variable, model):
         """
         Layers in hls_model.py can specify output array partitioning through the `pragma` attribute.
@@ -95,13 +104,14 @@ class CatapultWriter(Writer):
 
         # Walk model looking for any layer reconvergence (such cases would preclude setting FIFO_DEPTH=1)
         # (Not the most efficient algorithm (called for every variable and cut-n-pasted in _make_array_fifo_pragma below)
+        impl = write_impl_type
         no_reconvergence = True
-        fifo_depth = model.config.get_config_value("FIFO_DEPTH", default=1) 
         for layer in model.get_layers():
             if layer.attributes.layer.class_name == 'Concatenate':
                 no_reconvergence = False
 
         config = variable.pragma
+        factor = 0
         if type(config) is tuple:
             mode = config[0]
             if mode in ['partition', 'reshape']:
@@ -110,6 +120,7 @@ class CatapultWriter(Writer):
                     factor = config[2]
             elif mode == 'stream':
                 depth = config[1]
+                typ = 'complete'  # unused for stream, but keep defined
         else:
             mode = config
             typ = 'complete'
@@ -133,12 +144,18 @@ class CatapultWriter(Writer):
                     fifo = model.config.get_config_value("FIFO")
             if fifo is None:
                 fifo = model.config.get_config_value("FIFO")
+
             if fifo is not None:
                 retstr = f'#pragma hls_resource {variable.name}:cns variables="{variable.name}"'
                 if no_reconvergence:
                     retstr += f' map_to_module="{fifo}" fifo_depth="1"'
                 else:
                     retstr += f' map_to_module="{fifo}" fifo_depth="{depth}"'
+
+                # Comment out the WHOLE pragma line when implementation is ac_window
+                if impl == "ac_window":
+                    return f'// {retstr}'
+                else:
                 return retstr
             else:
                 return ''
@@ -149,7 +166,7 @@ class CatapultWriter(Writer):
     def _make_array_fifo_pragma(variable, model):
 
         # Walk model looking for any layer reconvergence (such cases would preclude setting FIFO_DEPTH=1)
-        # (Not the most efficient algorithm (called for every variable and cut-n-pasted in _make_array_fifo_pragma below)
+        impl = write_impl_type
         no_reconvergence = True
         for layer in model.get_layers():
             if layer.attributes.layer.class_name == 'Concatenate':
@@ -183,25 +200,37 @@ class CatapultWriter(Writer):
 
             if fifo is not None:
                 if no_reconvergence:
-                    return f'// #pragma hls_fifo_depth 1 {factor}'
+                    if impl == "ac_window":
+                        return f'// #pragma hls_fifo_depth 1 {factor}'
+                    else:
+                        return f'#pragma hls_fifo_depth 1 {factor}'
                 else:
-                    return f'// #pragma hls_fifo_depth {depth} {factor}'
+                    return f'#pragma hls_fifo_depth {depth} {factor}'
             else:
                 return ''
         else:
             return ''
 
-    def write_project_cpp(self, model, memory_type, port_type):
+
+    def write_project_cpp(self, model, memory_type, port_type, has_exponent=False):
         """Write the main architecture source file (myproject.cpp)
 
         Args:
             model (ModelGraph): the hls4ml model.
+            has_exponent (bool, optional): whether the merged weights_biases port (ParamStore='merged')
+                resolves to a reused PO2/exponent struct type, requiring a dual-port RAM.
         """
-        ROMLocation = model.config.get_config_value('ROMLocation')
-        filedir = os.path.dirname(os.path.abspath(__file__))
 
-        f = open(os.path.join(filedir, '../templates/catapult/firmware/myproject.cpp'))
-        fout = open(f'{model.config.get_output_dir()}/firmware/{model.config.get_project_name()}.cpp', 'w')
+        architecture = model.config.get_config_value('Architecture')
+
+        ROMLocation = model.config.get_config_value('ROMLocation')
+
+        filedir = os.path.dirname(os.path.abspath(__file__))
+        srcpath = self._catapult_template_path(architecture, 'firmware', 'myproject.cpp')
+        dstpath = f'{model.config.get_output_dir()}/firmware/{model.config.get_project_name()}.cpp'
+
+        f = open(srcpath)
+        fout = open(dstpath, 'w')
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
@@ -220,6 +249,154 @@ class CatapultWriter(Writer):
         weight_arrays = []  # To store weight variable details
         sync_variables = []  # To store dynamic sync variable names
         resource_pragmas = []  # To store resource pragmas for weights
+        if memory_type == 'RAM':
+            for layer in model.get_layers():
+                weights = layer.get_weights()
+                if weights:
+                    for i, w in enumerate(weights):
+                        shape = w.shape  # Extract the shape of the weight array
+                        size = 1
+                        for dim in shape:
+                            size *= dim  # Calculate the total size by multiplying dimensions
+                                
+                        # Add size to the total weights
+                        total_size += size
+
+                        # Generate the variable name dynamically (e.g., w2, b2, etc.)
+                        var_name = f'{w.name}'
+                        var_type = w.definition_cpp().split()[0]  # Correctly call the method
+
+                        # Print for debugging
+                        # print(f"Variable type for {var_name}: {var_type}")
+
+                        ac_shared_declarations += f'    static ac_shared<{var_type}[{size}]> {var_name};   // persistent, shared memory\n'
+                        if w.weight_class == 'ExponentWeightVariable':
+                            # PO2/exponent weights are stored as a custom struct type (sign + exponent),
+                            # not ac_int/ac_fixed, so ac::init_array<AC_VAL_DC> has no matching overload.
+                            # The don't-care init is only a simulation convenience to avoid X-state
+                            # warnings on numeric types; it is safe to skip for the exponent struct.
+                            ac_shared_declarations += f'    static bool {var_name}_init = true;\n'
+                        else:
+                            ac_shared_declarations += f'    static bool {var_name}_init = ac::init_array<AC_VAL_DC>({var_name},{size});\n'
+
+                        # Append the variable name and sync variable to the function call
+                        load_call += f', {var_name}'
+
+                        # Add details for the function signature. For exponent/PO2 weights, flag that
+                        # the load loop must copy the sign/weight fields individually instead of doing
+                        # a plain assignment: weights_biases is typed as 'weights_bias_t', a reused PO2
+                        # struct type, and exponent_*_t has no defined conversion from a *different*
+                        # (though structurally identical) named struct type -- see write_hls.
+                        is_exponent = w.weight_class == 'ExponentWeightVariable'
+                        weight_arrays.append((var_type, var_name, size, is_exponent))
+
+                        # Create a dynamic sync variable name
+                        sync_name = f'sync_{var_name}'
+                        sync_variables.append(sync_name)
+
+                        # Generate resource pragma. For PO2/exponent weights, load_scratchpad writes
+                        # the .sign and .weight fields individually (see load loop below), which
+                        # Catapult infers as two separate sub-resources -- a single whole-array pragma
+                        # leaves one of them unmapped/defaulted, conflicting with the consumer side's
+                        # own per-field mapping in nnet_utils. Map each field explicitly instead.
+                        if is_exponent:
+                            resource_pragmas.append(
+                                f'#pragma hls_resource {var_name}.weight:rsc variable=" {var_name}.weight" map_to_module="[DirectOutput]"'
+                            )
+                            resource_pragmas.append(
+                                f'#pragma hls_resource {var_name}.sign:rsc variable=" {var_name}.sign" map_to_module="[DirectOutput]"'
+                            )
+                        else:
+                            resource_pragmas.append(f'#pragma hls_resource {var_name}:rsc variable="{var_name}" map_to_module="[DirectOutput]"')
+
+            for sync_name in sync_variables:
+                ac_shared_declarations += f'    static ac_sync {sync_name};\n'
+                # Append the variable name and sync variable to the function call
+                load_call += f', {sync_name}'            
+
+            # Close the function call
+            load_call += ');\n'
+
+            # Add the top-level pragma for the function
+            load_scratchpad_fn += '#pragma hls_design\n'
+
+            # Add resource pragmas before the function signature
+            for pragma in resource_pragmas:
+                load_scratchpad_fn += f'{pragma}\n'
+
+            # Start generating the function signature
+            load_scratchpad_fn += 'void load_scratchpad(\n'
+            load_scratchpad_fn += f'    ac_channel<bool> &reload,\n'
+
+            # Add the weights_biases array to the function signature
+            load_scratchpad_fn += f'    {port_type} weights_biases[{total_size}],\n'
+
+            # Add each individual weight array (e.g., w2, b2, etc.) to the function signature
+            for var_type, var_name, size, is_exponent in weight_arrays:
+                load_scratchpad_fn += f'    {var_type} {var_name}[{size}],\n'
+
+            # Add dynamic sync variables to the function signature
+            for sync_name in sync_variables:
+                load_scratchpad_fn += f'    ac_sync &{sync_name},\n'
+
+            # Remove trailing comma and close the function signature
+            load_scratchpad_fn = load_scratchpad_fn.rstrip(',\n') + '\n) {\n'
+
+            # Add guard for single-event loading only (TBD need to add primary input to trigger reload)
+            load_scratchpad_fn += f'    static bool loaded = false;\n'
+            load_scratchpad_fn +=  '    if (!loaded) {\n'
+
+            # Generate ONE combined load loop over the full weights_biases range, dispatching
+            # each element to its destination array by index range, instead of one separate
+            # loop per weight array. Catapult's scheduler allocates a read port on
+            # weights_biases:rsc per *loop* that accesses it; once the individual per-array
+            # loops are short enough for the scheduler to want to overlap them, that can
+            # exceed the number of ports the merged/RAM resource actually has ("insufficient
+            # resources ... please merge accesses to weights_biases:rsc", SCHD-4/SCHD-39).
+            # A single loop with one access point to weights_biases avoids that entirely.
+            offset = 0  # Track offset in weights_biases array
+            total_size = sum(size for _, _, size, _ in weight_arrays)
+            load_scratchpad_fn +=  '        #ifndef __SYNTHESIS__\n'
+            load_scratchpad_fn +=  '        std::cout << "Loading weights and biases" << std::endl;\n'
+            load_scratchpad_fn +=  '        #endif\n'
+            load_scratchpad_fn +=  '        #pragma hls_pipeline_init_interval 1\n'
+            load_scratchpad_fn += f'        for (int i = 0; i < {total_size}; i++) {{\n'
+            for idx, (var_type, var_name, size, is_exponent) in enumerate(weight_arrays):
+                end = offset + size
+                is_last = idx == len(weight_arrays) - 1
+                if idx == 0:
+                    load_scratchpad_fn += f'            if (i < {end}) {{\n'
+                elif is_last:
+                    load_scratchpad_fn += '            else {\n'
+                else:
+                    load_scratchpad_fn += f'            else if (i < {end}) {{\n'
+                local_idx = 'i' if offset == 0 else f'(i - {offset})'
+                if is_exponent:
+                    # PO2/exponent weight: weights_biases is 'weights_bias_t', a reused PO2 struct
+                    # type that may be a *different* (though structurally identical) named type than
+                    # var_name's own exponent_*_t, so a whole-struct assignment isn't guaranteed to
+                    # compile. Copy the sign/weight fields individually instead -- ac_int-to-ac_int
+                    # is a defined, value-preserving conversion, so this also tolerates PO2 weights
+                    # of different bit-widths across layers.
+                    load_scratchpad_fn += f'                {var_name}[{local_idx}].sign = weights_biases[i].sign;\n'
+                    load_scratchpad_fn += f'                {var_name}[{local_idx}].weight = weights_biases[i].weight;\n'
+                else:
+                    load_scratchpad_fn += f'                {var_name}[{local_idx}] = weights_biases[i];\n'
+                load_scratchpad_fn += '            }\n'
+                offset = end
+            load_scratchpad_fn += '        }\n'
+            load_scratchpad_fn += '        loaded = true;\n'
+            load_scratchpad_fn += '    }\n'
+
+            # Add sync_out calls for each sync variable
+            for var_name, sync_name in zip([v[1] for v in weight_arrays], sync_variables):
+                load_scratchpad_fn += f'    {sync_name}.sync_out({var_name});\n'
+
+            # Close the function
+            load_scratchpad_fn += '}\n'
+                                
+            merged_array_str = f'{port_type} weights_biases[{total_size}]'
+        #--------------------------------------------
 
         for line in f.readlines():
             # Add headers to weights and biases
@@ -240,7 +417,11 @@ class CatapultWriter(Writer):
                 newline += indent + inputs_str + ',\n'
                 newline += indent + outputs_str
                 if len(model_brams) > 0:
-                    newline += ',\n' + brams_str
+                    # Check if the memory_type is RAM
+                    if memory_type == 'RAM':
+                        newline += ',\n' + indent + merged_array_str + ',\n' + indent + 'ac_channel<bool> &reload'
+                    else:
+                        newline += ',\n' + brams_str
                 newline += '\n'
 
             elif '// hls-fpga-machine-learning insert namespace-start' in line:
@@ -273,14 +454,42 @@ class CatapultWriter(Writer):
                                 w.type.name, w.nonzeros, w.name, w.name
                             )
                         elif w.weight_class == 'ExponentWeightVariable':
-                            newline += indent + '    nnet::load_exponent_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
-                                w.type.name, w.data_length, w.name, w.name
-                            )
-                        else:
-                            newline += indent + '    nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
-                                w.type.name, w.data_length, w.name, w.name
-                            )
+                            if memory_type == 'RAM':
+                                # In merged/RAM mode, w is loaded via load_scratchpad() instead;
+                                # it is a static local there and not in scope here.
+                                newline += indent + '// nnet::load_exponent_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.data_length, w.name, w.name
+                                )
+                            else:
+                                newline += indent + '    nnet::load_exponent_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.data_length, w.name, w.name
+                                )
+                            else:
+                            if memory_type == 'RAM':
+                                # Comment out the load_weights_from_txt line for RAM memory_type
+                                newline += indent + '// nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.data_length, w.name, w.name
+                                )
+                            else:
+                                # Keep the original line for other memory types
+                                newline += indent + '    nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.data_length, w.name, w.name
+                                )
 
+            elif '// hls-fpga-machine-learning insert ac_shared' in line: 
+                if memory_type == 'RAM':
+                    # Initialize newline as an empty string to avoid UnboundLocalError
+                    newline = ""
+                    newline += ac_shared_declarations
+                    # Now 'load_call' contains the generated function call with the correct variables
+                    newline += indent + load_call
+                                
+            elif '// hls-fpga-machine-learning insert load_scratchpad' in line:
+                if memory_type == 'RAM':
+                    # Initialize newline as an empty string to avoid UnboundLocalError
+                    newline = ""
+                    newline += load_scratchpad_fn
+         
             # Add Interface Synthesis resource pragmas
             elif '// hls-fpga-machine-learning insert IFSynPragmas' in line:
                 newline = line
@@ -296,6 +505,16 @@ class CatapultWriter(Writer):
                 
                 if io_type == 'io_serial' or io_type == 'io_stream':
                     # Eventually this will be amba.ccs_axi4stream_in and amba.ccs_axi4stream_out
+                    if memory_type == 'RAM':
+                        # PO2/exponent weights split weights_biases into two sub-resources
+                        # (.sign/.weight, see the load_scratchpad pragmas below and the matching
+                        # per-field pragmas in nnet_dense_stream.h/nnet_conv2d_stream.h) that get
+                        # read concurrently when unpacking each element -- the default single-port
+                        # RAM library can't service both from one access, so use a dual-port RAM.
+                        weights_biases_mem_lib = 'ccs_sample_mem.ccs_ram_sync_dualport' if has_exponent else mem_lib
+                         # Properly format and escape the f-string
+                        newline += f'#pragma hls_resource weights_biases:rsc variable="weights_biases"'
+                        newline += f' map_to_module="{weights_biases_mem_lib}"\n'
                     for dut_input in all_inputs:
                         newline += f'#pragma hls_resource {dut_input}:rsc variables="{dut_input}"'
                         newline += ' map_to_module="ccs_ioport.ccs_in_wait"\n'
@@ -366,6 +585,22 @@ class CatapultWriter(Writer):
                                 if var.pragma:
                                     newline += '    ' + self._make_array_pragma(var, model) + '\n'
                     func = layer.get_attr('function_cpp', None)
+                    if memory_type == 'RAM':
+                        # General approach to identify weight and bias variables and add sync signals
+                        weight_name = None
+                        bias_name = None
+                        for var in layer.get_weights():
+                            if 'w' in var.name:
+                                weight_name = var.name
+                            if 'b' in var.name:
+                                bias_name = var.name
+
+                        # If both weight and bias are present, add sync signals to the function
+                        if func and weight_name and bias_name:
+                            sync_w = f"sync_{weight_name}"
+                            sync_b = f"sync_{bias_name}"
+                            # Modify the function to include sync signals
+                            func = func.replace(f"{weight_name}, {bias_name}", f"{weight_name}, {bias_name}, {sync_w}, {sync_b}")
                         
                     if func and io_type == 'io_parallel':
                         ## Fixup the func string with inserted sync signals.
@@ -420,9 +655,14 @@ class CatapultWriter(Writer):
             port_type (str): the type of port (e.g., 'ac_fixed', 'ac_channel', etc.).
         """
 
+        architecture = model.config.get_config_value('Architecture')
+
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir, '../templates/catapult/firmware/myproject.h'))
-        fout = open(f'{model.config.get_output_dir()}/firmware/{model.config.get_project_name()}.h', 'w')
+        srcpath = self._catapult_template_path(architecture, 'firmware', 'myproject.h')
+        dstpath = f'{model.config.get_output_dir()}/firmware/{model.config.get_project_name()}.h'
+
+        f = open(srcpath)
+        fout = open(dstpath, 'w')
 
         # Gather model inputs, outputs, and BRAM-stored variables
         model_inputs = model.get_input_variables()
@@ -452,13 +692,19 @@ class CatapultWriter(Writer):
                     outputs_str = ', '.join([o.definition_cpp(as_reference=True) for o in model_outputs])
                 brams_str = ', \n'.join([indent + b.definition_cpp(as_reference=False) for b in model_brams])
 
-                # Otherwise, keep individual weight and bias arrays
-                newline = ''
-                newline += indent + inputs_str + ',\n'
-                newline += indent + outputs_str
-                if len(model_brams) > 0:
-                    newline += ',\n' + brams_str
-                newline += '\n'
+                # Check if memory_type is RAM to merge weights and biases
+                if memory_type == 'RAM':
+                    # If using RAM, merge all weights/biases into one array
+                    weights_biases_str = f'{port_type} weights_biases[{total_weights_and_biases}]'
+                    newline = f'{indent}{inputs_str},\n{indent}{outputs_str},\n{indent}{weights_biases_str},\n{indent}ac_channel<bool> &reload'
+                else:
+                    # Otherwise, keep individual weight and bias arrays
+                    newline = ''
+                    newline += indent + inputs_str + ',\n'
+                    newline += indent + outputs_str
+                    if len(model_brams) > 0:
+                        newline += ',\n' + brams_str
+                    newline += '\n'
 
             elif '// hls-fpga-machine-learning insert namespace-start' in line:
                 newline = ''
@@ -480,14 +726,21 @@ class CatapultWriter(Writer):
         f.close()
         fout.close()
 
-    def write_defines(self, model):
+    def write_defines(self, model, memory_type=None, port_concrete_type=None):
         """Write the C++ type definitions file (defines.h)
 
         Args:
             model (ModelGraph): the hls4ml model.
+            memory_type (str, optional): the type of memory (e.g., 'RAM'), used for ParamStore='merged'.
+            port_concrete_type (str, optional): the underlying C++ type backing the merged
+                weights_biases port (either a reused PO2 struct type or an ac_fixed<...>), aliased
+                to 'weights_bias_t' when memory_type == 'RAM'.
         """
+
+        architecture = model.config.get_config_value('Architecture')
+
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir, '../templates/catapult/firmware/defines.h'))
+        f = open(self._catapult_template_path(architecture, 'firmware', 'defines.h'))
         fout = open(f'{model.config.get_output_dir()}/firmware/defines.h', 'w')
 
         bus_words = model.config.get_config_value('AC_BUS_WORDS', default=None)
@@ -515,6 +768,11 @@ class CatapultWriter(Writer):
                 for used_type in all_precision.values():
                     newline += used_type.definition_cpp()
 
+                if memory_type == 'RAM' and port_concrete_type is not None:
+                    # Give the merged weights/biases port one consistent name regardless of
+                    # whether it resolves to a reused PO2 struct type or a plain ac_fixed.
+                    newline += f'typedef {port_concrete_type} weights_bias_t;\n'
+
             elif '// hls-fpga-machine-learning insert namespace-start' in line:
                 newline = ''
 
@@ -541,9 +799,12 @@ class CatapultWriter(Writer):
         Args:
             model (ModelGraph): the hls4ml model.
         """
+
+        architecture = model.config.get_config_value('Architecture')
         ROMLocation = model.config.get_config_value('ROMLocation')
+
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir, '../templates/catapult/firmware/parameters.h'))
+        f = open(self._catapult_template_path(architecture, 'firmware', 'parameters.h'))
         fout = open(f'{model.config.get_output_dir()}/firmware/parameters.h', 'w')
 
         for line in f.readlines():
@@ -607,6 +868,7 @@ class CatapultWriter(Writer):
         Args:
             model (MultiModelGraph): the hls4ml multigraph model.
         """
+
         namespace = model.config.get_writer_config().get('Namespace', None)
         write_txt = model.config.get_writer_config().get('WriteWeightsTxt', True)
         for g in model.graphs:
@@ -649,8 +911,9 @@ class CatapultWriter(Writer):
             model (ModelGraph): the hls4ml model.
         """
 
+        architecture = model.config.get_config_value('Architecture')
+
         io_type = model.config.get_config_value('IOType')
-        filedir = os.path.dirname(os.path.abspath(__file__))
         impl = write_impl_type
 
         if not os.path.exists(f'{model.config.get_output_dir()}/tb_data/'):
@@ -673,7 +936,8 @@ class CatapultWriter(Writer):
                     output_predictions, f'{model.config.get_output_dir()}/tb_data/tb_output_predictions.dat'
                 )
 
-        f = open(os.path.join(filedir, '../templates/catapult/myproject_test.cpp'))
+        filedir = os.path.dirname(os.path.abspath(__file__))
+        f = open(self._catapult_template_path(architecture, 'myproject_test.cpp'))
         fout = open(f'{model.config.get_output_dir()}/{model.config.get_project_name()}_test.cpp', 'w')
 
         model_inputs = model.get_input_variables()
@@ -695,33 +959,81 @@ class CatapultWriter(Writer):
                 for bram in model_brams:
                     newline += f'#include \"firmware/weights/{bram.name}.h\"\n'
 
+            elif '// hls-fpga-machine-learning insert reload_channel' in line:
+                if memory_type == 'RAM':  # Check if the memory type is 'RAM'
+                    newline = indent + 'ac_channel<bool> reload;\n'
+
             elif '// hls-fpga-machine-learning insert declare weights' in line:
                 newline = line
                 total_size = 0  # Initialize total weight counter
 
-                # Execute the old code (from comments)
-                for layer in model.get_layers():
-                    for w in layer.get_weights():
-                        newline += w.definition_cpp() + ";\n"
+                if memory_type == 'RAM':  # Check if memory type is RAM
+                    model_weights = [var for var in model.get_weight_variables() if var.storage.lower() == 'bram']
+                    total_size = sum([np.prod(var.shape) for var in model_weights])
+                    newline += f"{port_type} weights_biases[{total_size}];\n"
+                else:
+                    # Execute the old code (from comments)
+                    for layer in model.get_layers():
+                        for w in layer.get_weights():
+                            newline += w.definition_cpp() + ";\n"
 
             elif '// hls-fpga-machine-learning insert load weights' in line:
                 newline = line
                 offset = 0  # Initialize offset for the weights_biases array
 
-                for layer in model.get_layers():
-                    for w in layer.get_weights():
-                        if w.weight_class == 'CompressedWeightVariable':
-                            newline += indent + 'nnet::load_compressed_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
-                                w.type.name, w.nonzeros, w.name, w.name
-                            )
-                        elif w.weight_class == 'ExponentWeightVariable':
-                            newline += indent + 'nnet::load_exponent_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
-                                w.type.name, w.data_length, w.name, w.name
-                            )
-                        else:
-                            newline += indent + 'nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
-                                w.type.name, w.data_length, w.name, w.name
-                            )
+                if memory_type == 'RAM':  # Check if the memory type is 'RAM'
+                    for layer in model.get_layers():
+                        for w in layer.get_weights():
+                            size = 1
+                            shape = w.shape
+                            for dim in shape:
+                                size *= dim  # Calculate the size of the current weight/bias array
+                            if w.weight_class == 'ExponentWeightVariable':
+                                # w.name.txt holds {sign, weight} pairs, not plain numbers; weights_biases
+                                # is typed as 'weights_bias_t' (a reused PO2 struct), so the existing
+                                # struct-aware loader can write directly into it.
+                                newline += indent + f'nnet::load_exponent_weights_from_txt<{port_type}, {size}>(weights_biases + {offset}, "{w.name}.txt"); // Load {w.name}\n'
+                            else:
+                                # Generate the weight loading for the single weights_biases array
+                                newline += indent + f'nnet::load_weights_from_txt<{port_type}, {size}>(weights_biases + {offset}, "{w.name}.txt"); // Load {w.name}\n'
+                            # Increment the offset by the size of the current array
+                            offset += size
+                else:
+                    # Original code logic for non-RAM memory types
+                    for layer in model.get_layers():
+                        for w in layer.get_weights():
+                            if w.weight_class == 'CompressedWeightVariable':
+                                newline += indent + 'nnet::load_compressed_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.nonzeros, w.name, w.name
+                                )
+                            elif w.weight_class == 'ExponentWeightVariable':
+                                newline += indent + 'nnet::load_exponent_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.data_length, w.name, w.name
+                                )
+                            else:
+                                newline += indent + 'nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(
+                                    w.type.name, w.data_length, w.name, w.name
+                                )
+
+            elif '// hls-fpga-machine-learning result setup' in line:
+                newline = line
+                # OUT_* is the POOLED output - the values that actually exist.
+                # L<n>_O_* is the last layer's UNPOOLED conv output, which is
+                # larger whenever that layer pools; using it here asked for a
+                # container bigger than PORT_OUTPUT_SIZE and aborted.
+                newline += indent + 'Oout_ct result(mnist_dims::OUT_H, mnist_dims::OUT_W, mnist_dims::OUT_D, 1);\n'
+            
+            elif '// hls-fpga-machine-learning repack the flat hls4ml weights into the unified PE weight memory' in line:
+                if not is_pe_array:
+                    raise ValueError(f"Repacking weights is only supported for PE array architectures, but architecture '{architecture}' was specified.")
+                newline = line
+                weight_args = ', '.join(
+                    w.name
+                    for layer in model.get_layers()
+                    if getattr(layer, 'class_name', layer.name) in major_layer_types
+                    for w in layer.get_weights()
+                )
+                newline += indent + f'pe_tb::pack_weights({weight_args}, g_weights_mem, g_net);\n'
 
             elif '// hls-fpga-machine-learning insert data' in line:
                 newline = line
@@ -803,7 +1115,7 @@ class CatapultWriter(Writer):
                     else :
                         newline += indent + out.definition_cpp() + ';\n'
 
-            elif '// hls-fpga-machine-learning insert top-level-function' in line:
+            elif re.search(r'// hls-fpga-machine-learning insert top-level-function(?: with (\S+))?', line):
                 newline = line
                 if io_type == 'io_parallel' :
                     input_vars = ', '.join([i.name + ', ' + i.name + '_sync' for i in model_inputs])
@@ -813,7 +1125,11 @@ class CatapultWriter(Writer):
                     output_vars = ','.join([o.name for o in model_outputs])                    
                 bram_vars = ','.join([b.name for b in model_brams])
 
-                all_vars = ','.join(filter(None, [input_vars, output_vars, bram_vars]))
+                # Concatenate the input, output, and bram variables. Filter out empty/null values
+                if memory_type=='RAM':
+                    all_vars = ', '.join(filter(None, [input_vars, output_vars, 'weights_biases','reload']))
+                else:
+                    all_vars = ','.join(filter(None, [input_vars, output_vars, bram_vars]))
                     
                 top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
 
@@ -901,9 +1217,12 @@ class CatapultWriter(Writer):
             model (ModelGraph): the hls4ml model.
         """
 
+        architecture = model.config.get_config_value('Architecture')
+
         io_type = model.config.get_config_value('IOType')
+
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir, '../templates/catapult/myproject_bridge.cpp'))
+        f = open(self._catapult_template_path(architecture, 'myproject_bridge.cpp'))
         fout = open(f'{model.config.get_output_dir()}/{model.config.get_project_name()}_bridge.cpp', 'w')
 
         model_inputs = model.get_input_variables()
@@ -926,15 +1245,21 @@ class CatapultWriter(Writer):
 
             elif '// hls-fpga-machine-learning insert bram' in line:
                 newline = line
-                for bram in model_brams:
-                    newline += f'#include \"firmware/weights/{bram.name}.h\"\n'
+                if memory_type != 'RAM':
+                    for bram in model_brams:
+                        newline += f'#include \"firmware/weights/{bram.name}.h\"\n'
 
             elif '// hls-fpga-machine-learning insert declare weights' in line:
                 newline = line
-
-                for layer in model.get_layers():
-                    for w in layer.get_weights():
-                        newline += w.definition_cpp() + ";\n"
+                if memory_type == 'RAM':  # Check if memory type is RAM
+                    model_weights = [var for var in model.get_weight_variables() if var.storage.lower() == 'bram']
+                    total_size = sum([np.prod(var.shape) for var in model_weights])
+                    newline += f"{port_type} weights_biases[{total_size}];\n"
+                else:
+                    # Execute the old code (from comments)
+                    for layer in model.get_layers():
+                        for w in layer.get_weights():
+                            newline += w.definition_cpp() + ";\n"
 
             elif '// hls-fpga-machine-learning insert load weights' in line:
                 newline = line
@@ -979,6 +1304,10 @@ class CatapultWriter(Writer):
                         newline += indent + '{var};\n'.format(var=o.definition_cpp(name_suffix='_ap'))
 
                 newline += '\n'
+                if memory_type=='RAM':
+                    newline += indent + '// Note reload is not utilized in bridge mode\n'
+                    newline += indent + 'ac_channel<bool> reload;\n'
+
                 if io_type == 'io_parallel' :
                     input_vars = ', '.join([i.name + '_ap, ' + i.name + '_sync' for i in model_inputs])
                     output_vars = ', '.join([o.name + '_ap, ' + o.name + '_sync'for o in model_outputs])
@@ -987,7 +1316,11 @@ class CatapultWriter(Writer):
                     output_vars = ','.join([o.name + '_ap' for o in model_outputs])
                 bram_vars = ','.join([b.name for b in model_brams])
 
-                all_vars = ','.join(filter(None, [input_vars, output_vars, bram_vars]))
+                # Concatenate the input, output, and bram variables. Filter out empty/null values
+                if memory_type=='RAM':
+                    all_vars = ', '.join(filter(None, [input_vars, output_vars, 'weights_biases','reload']))
+                else: 
+                    all_vars = ','.join(filter(None, [input_vars, output_vars, bram_vars]))
 
                 top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
                 newline += top_level
@@ -1235,6 +1568,8 @@ class CatapultWriter(Writer):
             model (ModelGraph): the hls4ml model.
         """
 
+        architecture = model.config.get_config_value('Architecture')
+
         filedir = os.path.dirname(os.path.abspath(__file__))
 
         # Note: until we get a pragma hls_iterations, to insert ITERATIONS directive it will look like this:
@@ -1331,8 +1666,6 @@ class CatapultWriter(Writer):
                 elif 'set hls_clock_period 5' in line:
                     line = indent + 'set hls_clock_period {}\n'.format(model.config.get_config_value('ClockPeriod'))
                 dst.write(line)
-
-
 
         # build_prj_bup.tcl
         srcpath = Path(filedir + '/../templates/catapult/build_prj_bup.tcl').resolve()
@@ -1465,6 +1798,7 @@ class CatapultWriter(Writer):
         Args:
             model (MultiModelGraph): the hls4ml multigraph model.
         """
+
         # TODO - not yet implemented for Catapult
         ### filedir = Path(__file__).parent
         ### os.makedirs(model.config.get_output_dir(), exist_ok=True)
@@ -1573,6 +1907,7 @@ class CatapultWriter(Writer):
         Args:
             model (ModelGraph): the hls4ml model.
         """
+
         path = f'{model.config.get_output_dir()}/firmware/nnet_utils/nnet_code_gen.h'
         f = open(path)
         contents = f.readlines()
@@ -1775,14 +2110,69 @@ class CatapultWriter(Writer):
         port_type = (
             model.config.get_config_value('PortType') if model.config.get_config_value('PortType') is not None else None
         )
+        port_concrete_type = None
+        has_exponent = False
+        if memory_type == 'RAM':
+            max_weight_bias_bitwidth = 0
+            max_weight_bias_intwidth = 0
+            exponent_weights = []  # (bitwidth, type_name) for every PO2/exponent weight found
+            has_non_exponent = False
+            for layer in model.get_layers():
+                weights = layer.get_weights()
+                if weights:
+                    for i, w in enumerate(weights):
+                        precision = w.type.precision
+                        if isinstance(precision, ExponentPrecisionType):
+                            exponent_weights.append((precision.width, w.type.name))
+                        elif isinstance(precision, FixedPrecisionType):
+                            has_non_exponent = True
+                            bitwidth = precision.width
+                            intwidth = precision.integer
+                            max_weight_bias_bitwidth = max(max_weight_bias_bitwidth, bitwidth)
+                            max_weight_bias_intwidth = max(max_weight_bias_intwidth, intwidth)
+                        elif isinstance(precision, (IntegerPrecisionType, XnorPrecisionType)):
+                            # Integer-only types: no fractional part, so the whole width counts as
+                            # the integer part.
+                            has_non_exponent = True
+                            bitwidth = precision.width
+                            max_weight_bias_bitwidth = max(max_weight_bias_bitwidth, bitwidth)
+                            max_weight_bias_intwidth = max(max_weight_bias_intwidth, bitwidth)
+
+            # ParamStore='merged' means every weight/bias in the model shares one unified,
+            # uniformly-typed memory. PO2/exponent weights are stored as a {sign, weight} struct,
+            # which is not interchangeable with a numeric ac_fixed representation -- there is no
+            # single port type that can hold both. Mixing PO2 and regular-quantized weights under
+            # a unified merged memory is therefore not supported.
+            assert not (exponent_weights and has_non_exponent), (
+                "ParamStore='merged' does not support mixing PO2/exponent-quantized weights with "
+                'regular fixed/integer-quantized weights in the same model (unified weight/bias '
+                'memory requires one common element type). Use a single quantization scheme for '
+                "all layers, or use a non-merged ParamStore."
+            )
+
+            if exponent_weights:
+                # Reuse the widest existing PO2/exponent weight's own generated struct type as the
+                # canonical merged-port type. Narrower (or equal) PO2 weights convert into/out of it
+                # via plain per-field (sign/weight) ac_int assignment -- see write_project_cpp's
+                # load_scratchpad codegen -- which is a defined, value-preserving conversion, so
+                # differing PO2 bit-widths across layers are handled automatically.
+                exponent_weights.sort(key=lambda x: x[0], reverse=True)
+                port_concrete_type = exponent_weights[0][1]
+                has_exponent = True
+            else:
+                port_concrete_type = f'ac_fixed<{max_weight_bias_bitwidth},{max_weight_bias_intwidth},true>'
+
+            # Give the merged port one consistent name regardless of whether it resolves to a PO2
+            # struct or a plain ac_fixed -- downstream codegen only ever needs to know 'weights_bias_t'.
+            port_type = 'weights_bias_t'
 
         print('Writing HLS project')
         self.write_output_dir(model)
-        self.write_project_cpp(model, memory_type, port_type)
+        self.write_project_cpp(model, memory_type, port_type, has_exponent)
         self.write_project_header(model, memory_type, port_type)
         self.write_layer_summary(model)
         self.write_weights(model)
-        self.write_defines(model)
+        self.write_defines(model, memory_type, port_concrete_type)
         self.write_parameters(model)
         self.write_test_bench(model, memory_type, port_type)
         self.write_bridge(model, memory_type, port_type)

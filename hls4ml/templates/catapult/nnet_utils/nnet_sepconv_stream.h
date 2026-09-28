@@ -140,8 +140,10 @@ void pointwise_mult_buffer(const data_T &data_pack, ac_channel<res_T> &res_strea
         data[id] = data_pack[id];
     }
 
-    CONFIG_T::mult_config::template kernel<typename data_T::value_type, typename res_T::value_type,
-                                           typename CONFIG_T::mult_config>::dense(data, res, weights, biases);
+    // CONFIG_T::mult_config::template kernel<typename data_T::value_type, typename res_T::value_type,
+                                        //    typename CONFIG_T::mult_config>::dense(data, res, weights, biases);
+    dense_latency<typename data_T::value_type, typename res_T::value_type, typename CONFIG_T::mult_config, nnet::II_RF>(
+                        data, res, weights, biases);
 
     #pragma hls_unroll
     CastLoop: for (unsigned jj = 0; jj < CONFIG_T::n_filt; jj++) {
@@ -229,14 +231,6 @@ void compute_depthwise_output_buffer_2d(const data_T &in_elem,
 
     // Add pixel to buffer
     nnet::shift_line_buffer<data_T, CONFIG_T>(in_elem, line_buffer, kernel_data);
-
-    #ifndef __SYNTHESIS__
-    // std::cout << "Kernel Data (m = " << m << "): ";
-    for (unsigned idx = 0; idx < CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan; idx++) {
-        std::cout << kernel_data[idx] << " ";
-    }
-    std::cout << std::endl;
-    #endif
  
     // Check to see if we have a full kernel
     if ((sX - lShiftX) == 0 && (sY - lShiftY) == 0 && pY > lShiftY - 1 && pX > lShiftX - 1) {

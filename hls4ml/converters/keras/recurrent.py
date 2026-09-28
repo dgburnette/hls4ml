@@ -15,6 +15,14 @@ from hls4ml.converters.keras_v2_to_hls import (
 rnn_layers = ['SimpleRNN', 'LSTM', 'GRU']
 
 
+def _make_zero_bias_data(weight_data, class_name):
+    d_out = weight_data.shape[-1]
+    if 'GRU' in class_name:
+        return np.zeros((2, d_out), dtype=np.float32)
+
+    return np.zeros((d_out,), dtype=np.float32)
+
+
 @keras_handler(*rnn_layers)
 def parse_rnn_layer(keras_layer, input_names, input_shapes, data_reader):
     assert keras_layer['class_name'] in rnn_layers or keras_layer['class_name'][1:] in rnn_layers
@@ -44,11 +52,7 @@ def parse_rnn_layer(keras_layer, input_names, input_shapes, data_reader):
     )
 
     if layer['bias_data'] is None:
-        d_out = layer['bias_data'].shape[-1]
-        if 'GRU' in layer['class_name']:
-            layer['bias_data'] = np.zeros((2, d_out), dtype=np.float32)
-        else:
-            layer['bias_data'] = np.zeros((d_out,), dtype=np.float32)
+        layer['bias_data'] = _make_zero_bias_data(layer['weight_data'], layer['class_name'])
 
     if 'GRU' in layer['class_name']:
         layer['apply_reset_gate'] = 'after' if keras_layer['config']['reset_after'] else 'before'
@@ -192,6 +196,11 @@ def parse_bidirectional_layer(keras_layer, input_names, input_shapes, data_reade
                 ],
             )
         )
+
+        if layer[f'{direction}_bias_data'] is None:
+            layer[f'{direction}_bias_data'] = _make_zero_bias_data(
+                layer[f'{direction}_weight_data'], layer[f'{direction}_class_name']
+            )
 
         if 'GRU' in rnn_layer['class_name']:
             layer[f'{direction}_apply_reset_gate'] = 'after' if rnn_layer['config']['reset_after'] else 'before'

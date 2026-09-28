@@ -204,7 +204,7 @@ activ_config_template = """struct {type}_config{index} : nnet::activ_config {{
     static const unsigned table_size = {table_size};
     static const unsigned io_type = nnet::{iotype};
     static const unsigned reuse_factor = {reuse};
-    typedef {table_t.name} table_t;
+    typedef {table_t.name} table_t;{relu_activation}
 }};\n"""
 
 param_activ_config_template = """struct {type}_config{index} : nnet::activ_config {{
@@ -267,6 +267,20 @@ class ActivationConfigTemplate(LayerConfigTemplate):
     def format(self, node):
         params = self._default_config_params(node)
         params['type'] = node.get_attr('activation')
+
+        if params['activation'].lower() == 'relu':
+            max_val = params['activ_param'][0]
+            if max_val is None:
+                params['relu_activation'] = f'\n    static const nnet::relu_max_type max_value_type = nnet::relu_max_type::None;' + \
+                                            f'\n    static constexpr float negative_slope = {params["activ_param"][1]};' + \
+                                            f'\n    static constexpr float threshold = {params["activ_param"][2]};'
+            else:
+                params['relu_activation'] = f'\n    static const nnet::relu_max_type max_value_type = nnet::relu_max_type::Value;' + \
+                                            f'\n    static constexpr float max_value = {params["activ_param"][0]};' + \
+                                            f'\n    static constexpr float negative_slope = {params["activ_param"][1]};' + \
+                                            f'\n    static constexpr float threshold = {params["activ_param"][2]};'
+        else:
+            params['relu_activation'] = ''
 
         return self.template.format(**params)
 

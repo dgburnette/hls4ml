@@ -779,9 +779,37 @@ class ModelGraph(Serializable):
         return variables
 
     def register_output_variable(self, out_name, variable):
-        if len(self.outputs) == 1 and out_name in self.outputs:
-            variable.type.name = 'result_t'
+        if out_name in self.outputs:
+            # Give model outputs a stable, meaningful port name derived from the output
+            # (layer) name, like input ports already do, instead of the layer-index-based
+            # default 'layer{index}_out' which shifts whenever the network architecture
+            # changes (e.g. pruning). This runs on every (re)registration -- including the
+            # ones done by later optimizer passes -- so the final port name always wins.
+            variable.name = self._output_port_name(out_name, variable.name)
+            if len(self.outputs) == 1:
+                variable.type.name = 'result_t'
+            else:
+                # Multiple outputs cannot all be 'result_t'; give each a consistent,
+                # layer-name-based type (matching the '<name>_result_t' convention that
+                # infer_precision already applies) instead of leaving some as the default
+                # index-based 'layer{index}_t'.
+                variable.type.name = f'{out_name}_result_t'
         self.output_vars[out_name] = variable
+
+    @staticmethod
+    def _output_port_name(out_name, current_name):
+        """Build a stable output-port name as '<out_name>_<role>'.
+
+        The role suffix (out / h / c ...) is taken from the framework's default variable
+        name, e.g. 'layer15_out' -> 'out', 'layer15_h' -> 'h'. If the output name already
+        ends with that suffix (e.g. a Keras layer named 'class_out'), it is used as-is to
+        avoid producing 'class_out_out'.
+        """
+        role = current_name.rsplit('_', 1)[-1] if '_' in current_name else 'out'
+        suffix = f'_{role}'
+        if out_name.endswith(suffix):
+            return out_name
+        return f'{out_name}{suffix}'
 
     def get_output_variables(self):
         variables = []

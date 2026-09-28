@@ -396,12 +396,24 @@ def keras_v2_to_hls(config, verbose=True):
 
 
 def handle_ac_window_implementation(config, layer_list):
-    # print(f"[DEBUG] Full config: {config}")
     impl_type = config.get('implementation', None)
-    # print(f"[DEBUG] implementation_type set to: {impl_type}")
+    str_type = config.get('HLSConfig', {}).get('Model', {}).get('Strategy', None)
+    io_type = config.get('IOType', None)
 
-    if impl_type != 'ac_window':
+    print(f"[DEBUG] handle_ac_window_implementation called with implementation='{impl_type}', strategy='{str_type}', io_type='{io_type}'")
+
+    if str(impl_type).lower() != 'ac_window':
         return  # Nothing to do if not ac_window
+
+    if str(impl_type).lower() == 'ac_window' and str(io_type).lower() == 'io_parallel':
+        raise Exception(
+            "IOType='io_parallel' is not supported for ac_window implementation."
+        )
+    
+    if str(impl_type).lower() == 'ac_window' and str(str_type).lower() == 'resource':
+        raise Exception(
+            "Strategy='Resource' is not supported for ac_window implementation."
+        )
 
     supported = True
     target_classes = {'conv2d', 'separableconv2d', 'depthwiseconv2d'}

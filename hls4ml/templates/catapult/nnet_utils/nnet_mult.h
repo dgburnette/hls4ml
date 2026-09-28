@@ -16,10 +16,7 @@ namespace product {
  * types of each.
  * --- */
 
-class Product {
-  public:
-    static void limit(unsigned multiplier_limit) {} // Nothing to do here
-};
+class Product {};
 
 template <class x_T, class w_T> class both_binary : public Product {
   public:
@@ -70,11 +67,7 @@ template <class x_T, class w_T> class mult : public Product {
         // 'Normal' product
         return a * w;
     }
-    static void limit(unsigned multiplier_limit) {
-    }
 };
-
-#include <iostream>
 
 template <class x_T, class w_T>
 class weight_exponential : public Product {

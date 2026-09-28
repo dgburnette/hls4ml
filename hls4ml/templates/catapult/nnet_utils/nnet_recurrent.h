@@ -724,7 +724,8 @@ void bidirectional_stack(
 #pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
 void bidirectional_stack(
-    data_T data[CONFIG_T::n_sequence * CONFIG_T::n_in], res_T res[CONFIG_T::n_sequence_out * CONFIG_T::n_out],
+    data_T data[CONFIG_T::n_sequence * CONFIG_T::n_in], ac_sync &sync_data,
+    res_T res[CONFIG_T::n_sequence_out * CONFIG_T::n_out], ac_sync &sync_res,
     typename CONFIG_T::FORWARD_CONFIG::weight_t
         param[CONFIG_T::FORWARD_CONFIG::n_state * CONFIG_T::FORWARD_CONFIG::n_mult * CONFIG_T::n_in],
     typename CONFIG_T::FORWARD_CONFIG::recurrent_weight_t

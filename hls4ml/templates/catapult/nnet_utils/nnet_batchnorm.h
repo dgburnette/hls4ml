@@ -44,7 +44,7 @@ void normalize(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in],
     #pragma hls_pipeline_init_interval ce_reuse_factor
 
     int multiplier_limit = ceil(float(CONFIG_T::n_in) / float(CONFIG_T::reuse_factor));
-    CONFIG_T::template product<data_T, typename CONFIG_T::scale_t>::limit(multiplier_limit);
+    // CONFIG_T::template product<data_T, typename CONFIG_T::scale_t>::limit(multiplier_limit);
 
     // Calculate result
     Result: for (int ires = 0; ires < CONFIG_T::n_in; ires++) {

@@ -85,8 +85,9 @@ static inline void dense_latency_impl_pow2(
 
             acc_t m = static_cast<acc_t>(cache);
             int e = w.weight.to_int();
-            if (e >= 0) m <<=  e;
-            else        m >>= -e;
+            // if (e >= 0) m <<=  e;
+            // else        m >>= -e;
+            m<<=e; // shift will do the right thing for negative e as well
 
             const bool neg = (w.sign != 1); 
 

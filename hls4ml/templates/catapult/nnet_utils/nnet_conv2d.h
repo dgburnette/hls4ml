@@ -1,4 +1,3 @@
-
 #ifndef NNET_CONV2D_H_
 #define NNET_CONV2D_H_
 
@@ -39,33 +38,6 @@ struct conv2d_config {
     static const bool store_weights_in_bram = false;
     static const unsigned n_zeros = 0; // not used yet
 };
-
-template <class data_T, class res_T, typename CONFIG_T>
-void conv_2d_cf(
-    data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan],
-    res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt],
-    typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
-    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
-{
-    if (CONFIG_T::strategy == nnet::latency) {
-        conv_2d_latency_cf<data_T, res_T, CONFIG_T>(data, res, weights, biases);
-    } else {
-        conv_2d_resource_cf<data_T, res_T, CONFIG_T>(data, res, weights, biases);
-    }
-}
-
-#pragma hls_design block
-template <class data_T, class res_T, typename CONFIG_T>
-void conv_2d_cf(
-    data_T data[CONFIG_T::in_height * CONFIG_T::in_width * CONFIG_T::n_chan], ac_sync &sync_data,
-    res_T res[CONFIG_T::out_height * CONFIG_T::out_width * CONFIG_T::n_filt], ac_sync &sync_res,
-    typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
-    typename CONFIG_T::bias_t biases[CONFIG_T::n_filt]) 
-{
-  sync_data.sync_in();
-  conv_2d_cf<data_T, res_T, CONFIG_T>(data, res, weights, biases);
-  sync_res.sync_out();
-}
 
 template <class data_T, class res_T, typename CONFIG_T>
 void conv_2d_cl(

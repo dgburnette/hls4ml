@@ -188,12 +188,10 @@ class CatapultBackend(FPGABackend):
             'catapult:generate_conv_streaming_instructions',
             'catapult:apply_resource_strategy',
             'catapult:generate_conv_im2col',
-            'catapult:generate_pointwise_conv1_d',
             'catapult:generate_unrolled_dense_resource',
             'catapult:set_pipeline_style',
             'catapult:d_a_latency_dense_template',
             'catapult:d_a_latency_conv_template',
-            'catapult:apply_winograd_kernel_transformation',
         ]
         catapult_types_flow = register_flow('specific_types', catapult_types, requires=[init_flow], backend=self.name)
 
@@ -259,7 +257,7 @@ class CatapultBackend(FPGABackend):
         ram='Xilinx_RAMS.BLOCK_1R1W_RBW',
         clock_period=5,
         clock_uncertainty='12.5%',
-        io_type='io_parallel',
+        io_type='io_stream',
         namespace=None,
         write_weights_txt=True,
         write_tar=False,
@@ -279,6 +277,7 @@ class CatapultBackend(FPGABackend):
         BUPWorkers=0,
         LaunchDA=0,
         startup='',
+        architecture='dataflow',
         **_,
     ):
         """Create initial configuration of the Catapult backend.
@@ -295,7 +294,8 @@ class CatapultBackend(FPGABackend):
             clock_period (int, optional): The clock period. Defaults to 5.
             clock_uncertainty (str, optional): The clock uncertainty. Defaults to 12.5%.
             io_type (str, optional): Type of implementation used. One of
-                'io_parallel' or 'io_stream'. Defaults to 'io_parallel'.
+                'io_parallel' or 'io_stream'. Defaults to 'io_stream' -- 'io_parallel' is not
+                supported by the Catapult backend.
             namespace (str, optional): If defined, place all generated code within a namespace. Defaults to None.
             write_weights_txt (bool, optional): If True, writes weights to .txt files which speeds up compilation.
                 Defaults to True.
@@ -341,9 +341,11 @@ class CatapultBackend(FPGABackend):
         config['ClockUncertainty'] = clock_uncertainty if clock_uncertainty is not None else '12.5%'
         config['FIFO'] = fifo
         config['RAM'] = ram
-        config['IOType'] = io_type if io_type is not None else 'io_parallel'
+        config['Architecture'] = architecture if architecture is not None else 'dataflow'
+        config['IOType'] = io_type if io_type is not None else 'io_stream'
         config['ProjectDir'] = project_dir
         config['HLSConfig'] = {}
+        config['PEConfig'] = {}
         config['WriterConfig'] = {
             'Namespace': namespace,
             'WriteWeightsTxt': write_weights_txt,

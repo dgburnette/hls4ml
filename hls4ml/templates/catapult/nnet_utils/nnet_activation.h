@@ -18,7 +18,7 @@
 #include <ac_fixed.h>
 #include <ac_math/ac_elu_pwl.h>
 #include <ac_math/ac_pow_pwl.h>
-#include <ac_math/ac_relu.h>
+#include <ac_math/ac_relu_general.h>
 #include <ac_math/ac_selu_pwl.h>
 #include <ac_math/ac_sigmoid_pwl.h>
 #include <ac_math/ac_softmax_pwl_new.h>
@@ -28,6 +28,8 @@
 #include <cmath>
 
 namespace nnet {
+
+enum class relu_max_type { None = 0, Value = 1 };
 
 struct activ_config {
     // IO size
@@ -70,6 +72,32 @@ void linear(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 // *************************************************
 //       RELU Activation
 // *************************************************
+template <class data_T, class res_T, class CONFIG_T, relu_max_type max_value_type>
+struct relu_dispatch;
+
+template <class data_T, class res_T, class CONFIG_T>
+struct relu_dispatch<data_T, res_T, CONFIG_T, relu_max_type::None> 
+{
+    static void run(data_T data, res_T& res)
+    {
+        data_T negative_slope = (data_T) CONFIG_T::negative_slope;
+        data_T threshold = (data_T) CONFIG_T::threshold;
+        ac_math::ac_relu_general(data, res, negative_slope, threshold);
+    }
+};
+
+template <class data_T, class res_T, class CONFIG_T>
+struct relu_dispatch<data_T, res_T, CONFIG_T, relu_max_type::Value> 
+{
+    static void run(data_T data, res_T& res)
+    {
+        data_T max_value = (data_T) CONFIG_T::max_value;
+        data_T negative_slope = (data_T) CONFIG_T::negative_slope;
+        data_T threshold = (data_T) CONFIG_T::threshold;
+        ac_math::ac_relu_general(data, res, max_value, negative_slope, threshold);
+    }
+};
+
 //#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T> 
 void relu(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in])
@@ -78,7 +106,7 @@ void relu(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in])
     #pragma hls_pipeline_init_interval 1
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         datareg = data[ii];
-        ac_math::ac_relu(datareg, res[ii]);
+        relu_dispatch<data_T, res_T, CONFIG_T, CONFIG_T::max_value_type>::run(datareg, res[ii]);
     }
 }
 
@@ -119,7 +147,8 @@ void relu_max(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 }
 
 template <class data_T, class res_T, typename CONFIG_T> 
-void relu6(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+void relu6(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
     relu_max<data_T, res_T, 6, CONFIG_T>(data, res);
 }
 
@@ -134,7 +163,8 @@ void relu6(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 }
 
 template <class data_T, class res_T, typename CONFIG_T> 
-void relu1(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+void relu1(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
     relu_max<data_T, res_T, 1, CONFIG_T>(data, res);
 }
 
@@ -155,7 +185,8 @@ void relu1(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 template </*unsigned K,*/ int W1, int I1, bool S1, ac_q_mode Q1, ac_o_mode O1, int W2, int I2, bool S2, ac_q_mode Q2,
           ac_o_mode O2>
 void ac_sigmoid_pwl_wrapper(const ac_fixed<W1, I1, S1, Q1, O1>(&input) /*[K]*/,
-                            ac_fixed<W2, I2, S2, Q2, O2>(&output) /*[K]*/) {
+                            ac_fixed<W2, I2, S2, Q2, O2>(&output) /*[K]*/) 
+{
     ac_fixed<W2, I2, false, Q2, O2> tmp; //[K];
     ac_math::ac_sigmoid_pwl<AC_TRN, W1, I1, true, Q1, O1, W2, I2, Q2, O2>(input, tmp);
     output = tmp;
@@ -201,15 +232,15 @@ void sigmoid(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 //       Softmax Activation
 // *************************************************
 
-enum class softmax_implementation { latency = 0, legacy = 1, stable = 2 };
+enum class softmax_implementation { latency = 0, legacy = 1, stable = 2, argmax = 3 };
 
 inline float exp_fcn_float(float input) { return std::exp(input); }
 
-template <class data_T, typename CONFIG_T> 
+template <class data_T, unsigned table_size> 
 inline float softmax_real_val_from_idx(unsigned i) 
 {
     // Treat the index as the top N bits
-    static constexpr int N = ceillog2(CONFIG_T::table_size); // number of address bits for table
+    static constexpr int N = ceillog2(table_size); // number of address bits for table
     data_T x(0);
     // CATAPULT_PORT
     // x(x.width-1, x.width-N) = i;
@@ -218,11 +249,11 @@ inline float softmax_real_val_from_idx(unsigned i)
     return (float)x.to_double();
 }
 
-template <class data_T, typename CONFIG_T> 
+template <class data_T, unsigned table_size> 
 inline unsigned softmax_idx_from_real_val(data_T x) 
 {
     // Slice the top N bits to get an index into the table
-    static constexpr int N = ceillog2(CONFIG_T::table_size); // number of address bits for table
+    static constexpr int N = ceillog2(table_size); // number of address bits for table
     // CATAPULT_PORT
     // ac_int<N,false> y = x(x.width-1, x.width-N); // slice the top N bits of input
     // return (unsigned) y(N-1, 0);
@@ -231,21 +262,27 @@ inline unsigned softmax_idx_from_real_val(data_T x)
 }
 
 template <class data_T, typename CONFIG_T>
-void init_exp_table(typename CONFIG_T::exp_table_t table_out[CONFIG_T::table_size]) {
+void init_exp_table(typename CONFIG_T::exp_table_t table_out[CONFIG_T::exp_table_size], bool negative = false) 
+{
     // The template data_T is the data type used to address the table
-    for (unsigned i = 0; i < CONFIG_T::table_size; i++) {
+    for (unsigned i = 0; i < CONFIG_T::exp_table_size; i++) {
         // Slicing bits for address is going to round towards 0, so take the central value
-        float x = softmax_real_val_from_idx<data_T, CONFIG_T>(i);
+        float x = softmax_real_val_from_idx<data_T, CONFIG_T::exp_table_size>(i) * CONFIG_T::exp_scale;
+        if (negative) {
+            // for normalized inputs, we keep the normalization values positive (x_bar = x_max - x)
+            // so we need to negate the input (exp(-x_bar) = exp(x - x_max))
+            x = -x;
+        }
         typename CONFIG_T::exp_table_t exp_x = exp_fcn_float(x);
         table_out[i] = exp_x;
     }
 }
 
 template <class data_T, typename CONFIG_T>
-void init_invert_table(typename CONFIG_T::inv_table_t table_out[CONFIG_T::table_size]) {
+void init_invert_table(typename CONFIG_T::inv_table_t table_out[CONFIG_T::inv_table_size]) {
     // The template data_T is the data type used to address the table
-    for (unsigned i = 0; i < CONFIG_T::table_size; i++) {
-        float x = softmax_real_val_from_idx<data_T, CONFIG_T>(i);
+    for (unsigned i = 0; i < CONFIG_T::inv_table_size; i++) {
+        float x = softmax_real_val_from_idx<data_T, CONFIG_T::inv_table_size>(i);
 #ifdef __SYNTHESIS__
         // hack for now to get through the flow
         typename CONFIG_T::inv_table_t inv_x = 1 + x;
@@ -256,12 +293,57 @@ void init_invert_table(typename CONFIG_T::inv_table_t table_out[CONFIG_T::table_
     }
 }
 
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_latency(data_T data[CONFIG_T::n_slice], res_T res[CONFIG_T::n_slice]) 
+{
+    // #pragma hls_pipeline_init_interval 1
+    // Initialize the lookup tables
+#ifdef __SYNTHESIS__
+    bool initialized = false;
+    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
+#else
+    static bool initialized = false;
+    static typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    static typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
+
+#endif
+    if (!initialized) {
+        // Note we are exponentiating the inputs, which have type data_T
+        init_exp_table<data_T, CONFIG_T>(exp_table);
+        // Note we are inverting the exponentials, which have type exp_table_t
+        init_invert_table<typename CONFIG_T::inv_inp_t, CONFIG_T>(invert_table);
+        initialized = true;
+    }
+
+    // Calculate all the e^x's
+    typename CONFIG_T::accum_t exp_res[CONFIG_T::n_slice];
+    typename CONFIG_T::inv_inp_t exp_sum(0);
+    #pragma hls_unroll
+    for (unsigned i = 0; i < CONFIG_T::n_slice; i++) {
+        unsigned x = softmax_idx_from_real_val<data_T, CONFIG_T::exp_table_size>(data[i]);
+        exp_res[i] = exp_table[x];
+    }
+
+    // Explicitly sum the results with an adder tree.
+    // Rounding & Saturation mode, which improve accuracy, prevent Vivado from expression balancing
+    Op_add<typename CONFIG_T::accum_t> op_add;
+    exp_sum = reduce<typename CONFIG_T::accum_t, CONFIG_T::n_slice, Op_add<typename CONFIG_T::accum_t>>(exp_res, op_add);
+
+    typename CONFIG_T::inv_table_t inv_exp_sum =
+        invert_table[softmax_idx_from_real_val<typename CONFIG_T::inv_inp_t, CONFIG_T::inv_table_size>(exp_sum)];
+    #pragma hls_unroll
+    for (unsigned i = 0; i < CONFIG_T::n_slice; i++) {
+        res[i] = exp_res[i] * inv_exp_sum;
+    }
+}
 
 // This is a workaround to help the template deduction to work correctly and fix the inconsistency that HLS4ML expects
 // softmax output to be signed but AC Math softmax knows it is always unsigned
 template <unsigned K, int W1, int I1, bool S1, ac_q_mode Q1, ac_o_mode O1, int W2, int I2, bool S2, ac_q_mode Q2,
           ac_o_mode O2>
-void ac_softmax_pwl_wrapper(const ac_fixed<W1, I1, S1, Q1, O1> (&input)[K], ac_fixed<W2, I2, S2, Q2, O2> (&output)[K]) {
+void ac_softmax_pwl_wrapper(const ac_fixed<W1, I1, S1, Q1, O1> (&input)[K], ac_fixed<W2, I2, S2, Q2, O2> (&output)[K]) 
+{
     ac_fixed<W2, I2, false, Q2, O2> tmp[K];
     ac_math::ac_softmax_pwl_new<0,0,AC_TRN, K, W1,I1,S1,Q1,O1,W2,I2,Q2,O2>(input, tmp);
     for (unsigned int x = 0; x < K; x++)
@@ -270,36 +352,187 @@ void ac_softmax_pwl_wrapper(const ac_fixed<W1, I1, S1, Q1, O1> (&input)[K], ac_f
 
   //#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
-void softmax(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+void softmax_stable(data_T data[CONFIG_T::n_slice], res_T res[CONFIG_T::n_slice]) 
 {
-    data_T data_copy[CONFIG_T::n_in];
-    res_T res_copy[CONFIG_T::n_in];
-// workaround for the array passing - alternative is to change the signature of all of the functions to reference-of-array
-#pragma hls_unroll
-COPY_IN_ARRAY:
-    for (unsigned i = 0; i < CONFIG_T::n_in; i++)
+    data_T data_copy[CONFIG_T::n_slice];
+    res_T res_copy[CONFIG_T::n_slice];
+    // workaround for the array passing - alternative is to change the signature of all of the functions to reference-of-array
+    #pragma hls_unroll
+    COPY_IN_ARRAY: for (unsigned i = 0; i < CONFIG_T::n_slice; i++)
         data_copy[i] = data[i];
     ac_softmax_pwl_wrapper(data_copy, res_copy);
-#pragma hls_unroll
-COPY_OUT_ARRAY:
-    for (unsigned i = 0; i < CONFIG_T::n_in; i++)
+    #pragma hls_unroll
+    COPY_OUT_ARRAY: for (unsigned i = 0; i < CONFIG_T::n_slice; i++)
         res[i] = res_copy[i];
+}
+
+template <typename CONFIG_T, int N_TABLE> 
+void init_exp_table_legacy(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
+    for (int ii = 0; ii < N_TABLE; ii++) {
+        // First, convert from table index to X-value (signed 8-bit, range -8 to +8)
+        float in_val = 2 * 8.0 * (ii - float(N_TABLE) / 2.0) / float(N_TABLE);
+        // Next, compute lookup table function
+        typename CONFIG_T::table_t real_val = exp_fcn_float(in_val);
+        // std::cout << "Lookup table In Value: " << in_val << " Result: " << real_val << std::endl;
+        table_out[ii] = real_val;
+    }
+}
+
+template <typename CONFIG_T, int N_TABLE> 
+void init_invert_table_legacy(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
+    // Inversion function:
+    //   result = 1/x
+    for (int ii = 0; ii < N_TABLE; ii++) {
+        // First, convert from table index to X-value (signed 8-bit, range 0 to +64)
+        float in_val = 64.0 * ii / float(N_TABLE);
+        // Next, compute lookup table function
+        if (in_val > 0.0)
+            table_out[ii] = 1.0 / in_val;
+        else
+            table_out[ii] = 0.0;
+    }
+}
+
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_legacy(data_T data[CONFIG_T::n_slice], res_T res[CONFIG_T::n_slice]) 
+{
+    // Initialize the lookup table
+#ifdef __SYNTHESIS__
+    bool initialized = false;
+    typename CONFIG_T::table_t exp_table[CONFIG_T::exp_table_size];
+    typename CONFIG_T::table_t invert_table[CONFIG_T::inv_table_size];
+#else
+    static bool initialized = false;
+    static typename CONFIG_T::table_t exp_table[CONFIG_T::exp_table_size];
+    static typename CONFIG_T::table_t invert_table[CONFIG_T::inv_table_size];
+#endif
+    if (!initialized) {
+        init_exp_table_legacy<CONFIG_T, CONFIG_T::exp_table_size>(exp_table);
+        init_invert_table_legacy<CONFIG_T, CONFIG_T::inv_table_size>(invert_table);
+        initialized = true;
+    }
+
+    // Index into the lookup table based on data for exponentials
+    typename CONFIG_T::table_t exp_res[CONFIG_T::n_slice]; // different, independent, fixed point precision
+    typename CONFIG_T::table_t exp_diff_res;               // different, independent, fixed point precision
+    data_T data_cache[CONFIG_T::n_slice];
+    int data_round;
+    int index;
+    for (int ii = 0; ii < CONFIG_T::n_slice; ii++) {
+        data_cache[ii] = data[ii];
+        exp_res[ii] = 0;
+    }
+
+    for (int ii = 0; ii < CONFIG_T::n_slice; ii++) {
+        for (int jj = 0; jj < CONFIG_T::n_slice; jj++) {
+            if (ii == jj)
+                exp_diff_res = 1;
+            else {
+                data_round = (data_cache[jj] - data_cache[ii]) * CONFIG_T::exp_table_size / 16;
+                index = data_round + 8 * CONFIG_T::exp_table_size / 16;
+                if (index < 0)
+                    index = 0;
+                if (index > CONFIG_T::exp_table_size - 1)
+                    index = CONFIG_T::exp_table_size - 1;
+                exp_diff_res = exp_table[index];
+            }
+            exp_res[ii] += exp_diff_res;
+        }
+    }
+
+    // Second loop to invert
+    for (int ii = 0; ii < CONFIG_T::n_slice; ii++) {
+        int exp_res_index = exp_res[ii] * CONFIG_T::inv_table_size / 64;
+        if (exp_res_index < 0)
+            exp_res_index = 0;
+        if (exp_res_index > CONFIG_T::inv_table_size - 1)
+            exp_res_index = CONFIG_T::inv_table_size - 1;
+        // typename CONFIG_T::table_t exp_res_invert = invert_table[exp_res_index];
+        res[ii] = (res_T)invert_table[exp_res_index];
+    }
+}
+
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_argmax(data_T data[CONFIG_T::n_slice], res_T res[CONFIG_T::n_slice]) 
+{
+    #pragma hls_unroll
+    for (int i = 0; i < CONFIG_T::n_slice; i++) {
+        res[i] = (res_T)0;
+    }
+
+    data_T maximum = data[0];
+    int idx = 0;
+
+    #pragma hls_pipeline_init_interval 1
+    for (int i = 1; i < CONFIG_T::n_slice; i++) {
+        if (data[i] > maximum) {
+            maximum = data[i];
+            idx = i;
+        }
+    }
+
+    res[idx] = (res_T)1;
+}
+
+template <class data_T, class res_T, typename CONFIG_T> 
+void softmax(data_T data[CONFIG_T::n_slice], res_T res[CONFIG_T::n_slice]) 
+{
+    // static_assert(CONFIG_T::axis == -1, "Softmax layer only supports axis=-1.");
+
+    if constexpr(CONFIG_T::implementation == softmax_implementation::latency) {
+        softmax_latency<data_T, res_T, CONFIG_T>(data, res);
+    }
+    if constexpr(CONFIG_T::implementation == softmax_implementation::stable) {
+        softmax_stable<data_T, res_T, CONFIG_T>(data, res);
+    }
+    if constexpr(CONFIG_T::implementation == softmax_implementation::legacy) {
+        softmax_legacy<data_T, res_T, CONFIG_T>(data, res);
+    }
+    if constexpr(CONFIG_T::implementation == softmax_implementation::argmax) {
+        softmax_argmax<data_T, res_T, CONFIG_T>(data, res);
+    }
 }
 
 #pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
-void softmax(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
-             res_T res[CONFIG_T::n_in], ac_sync &sync_res)
+void softmax(data_T data[CONFIG_T::n_slice], ac_sync &sync_data,
+             res_T res[CONFIG_T::n_slice], ac_sync &sync_res)
 {
   sync_data.sync_in();
   softmax<data_T, res_T, CONFIG_T>(data, res);
   sync_res.sync_out();
 }
 
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_multidim(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
+    data_T buffer_in[CONFIG_T::n_slice];
+    res_T buffer_out[CONFIG_T::n_slice];
+    #pragma hls_unroll
+    for (signed i = 0; i < CONFIG_T::n_outer; i++) {
+        #pragma hls_unroll
+        for (signed k = 0; k < CONFIG_T::n_inner; k++) {
+            #pragma hls_unroll
+            for (signed j = 0; j < CONFIG_T::n_slice; j++) {
+                buffer_in[j] = data[i * CONFIG_T::n_slice * CONFIG_T::n_inner + j * CONFIG_T::n_inner + k];
+            }
+            softmax<data_T, res_T, CONFIG_T>(buffer_in, buffer_out);
+            #pragma hls_unroll
+            for (signed j = 0; j < CONFIG_T::n_slice; j++) {
+                res[i * CONFIG_T::n_slice * CONFIG_T::n_inner + j * CONFIG_T::n_inner + k] = buffer_out[j];
+            }
+        }
+    }
+}
+
 // *************************************************
 //       TanH Activation
 // *************************************************
-template <typename CONFIG_T, int N_TABLE> void init_tanh_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
+template <typename CONFIG_T, int N_TABLE> 
+void init_tanh_table(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
     // Implement tanh lookup
     for (int ii = 0; ii < N_TABLE; ii++) {
         // First, convert from table index to X-value (signed 8-bit, range -4 to +4)
@@ -312,7 +545,9 @@ template <typename CONFIG_T, int N_TABLE> void init_tanh_table(typename CONFIG_T
     }
 }
 
-template <class data_T, class res_T, typename CONFIG_T> void tanh(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+template <class data_T, class res_T, typename CONFIG_T> 
+void tanh(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         // res[ii] = ac_math::ac_tanh_pwl(data[ii]);
         ac_math::ac_tanh_pwl(data[ii], res[ii]);
@@ -336,9 +571,6 @@ void tanh(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 template <class data_T, class res_T, typename CONFIG_T>
 void hard_sigmoid(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
 {
-    // data_T datareg;
-    // data_T slope = (data_T)0.2;
-    // data_T shift = (data_T)0.5;
     #pragma hls_pipeline_init_interval 1
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         auto datareg = CONFIG_T::slope * data[ii] + CONFIG_T::shift;
@@ -367,16 +599,13 @@ void hard_sigmoid(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 template <class data_T, class res_T, typename CONFIG_T>
 void hard_tanh(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
 {
-    data_T datareg;
-    // data_T slope = (data_T)0.2;
-    // data_T shift = (data_T)0.5;
     #pragma hls_pipeline_init_interval 1
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         auto sigmoid = CONFIG_T::slope * data[ii] + CONFIG_T::shift;
         if (sigmoid > 1)
-            datareg = 1;
+            sigmoid = 1;
         else if (sigmoid < 0)
-            datareg = 0;
+            sigmoid = 0;
         res[ii] = 2 * sigmoid - 1;
     }
 }
@@ -452,7 +681,9 @@ void thresholded_relu(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 // *************************************************
 inline float softplus_fcn_float(float input) { return std::log(std::exp(input) + 1.); }
 
-template <typename CONFIG_T, int N_TABLE> void init_softplus_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
+template <typename CONFIG_T, int N_TABLE> 
+void init_softplus_table(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
     // Default softplus function:
     //   result = log(exp(x) + 1)
     for (int ii = 0; ii < N_TABLE; ii++) {
@@ -475,7 +706,8 @@ void ac_softplus_pwl_wrapper(const ac_fixed<W, I, S, Q, O>(&input), ac_fixed<out
 
 //#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
-void softplus(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+void softplus(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         ac_softplus_pwl_wrapper(data[ii], res[ii]);
     }
@@ -497,7 +729,8 @@ void softplus(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 inline float softsign_fcn_float(float input) { return input / (std::abs(input) + 1.); }
 
 template <typename CONFIG_T, int N_TABLE> 
-void init_softsign_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
+void init_softsign_table(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
     // Default softsign function:
     //   result = x / (abs(x) + 1)
     for (int ii = 0; ii < N_TABLE; ii++) {
@@ -512,7 +745,8 @@ void init_softsign_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
 
 //#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T>
-void softsign(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+void softsign(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         // res[ii] = ac_math::ac_softsign_pwl(data[ii]);
         ac_math::ac_softsign_pwl(data[ii], res[ii]);
@@ -535,7 +769,8 @@ void softsign(data_T data[CONFIG_T::n_in], ac_sync &sync_data,
 inline float elu_fcn_float(float input) { return std::exp(input) - 1.; }
 
 template <typename CONFIG_T, int N_TABLE> 
-void init_elu_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
+void init_elu_table(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
     // Default ELU function:
     //   result = alpha * (e^(x) - 1)
     for (int ii = 0; ii < N_TABLE; ii++) {
@@ -551,7 +786,8 @@ void init_elu_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
 
 //#pragma hls_design block
 template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void elu(data_T data[CONFIG_T::n_in], const param_T alpha, res_T res[CONFIG_T::n_in]) {
+void elu(data_T data[CONFIG_T::n_in], const param_T alpha, res_T res[CONFIG_T::n_in]) 
+{
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         ac_math::ac_elu_pwl(data[ii], res[ii], alpha);
     }
@@ -576,7 +812,8 @@ inline float selu_fcn_float(float input) {
 }
 
 template <typename CONFIG_T, int N_TABLE> 
-void init_selu_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
+void init_selu_table(typename CONFIG_T::table_t table_out[N_TABLE]) 
+{
     // Default SELU function:
     //   result = 1.05 * (1.673 * (e^(x) - 1))
     for (int ii = 0; ii < N_TABLE; ii++) {
@@ -592,7 +829,8 @@ void init_selu_table(typename CONFIG_T::table_t table_out[N_TABLE]) {
 
 //#pragma hls_design block
 template <class data_T, class res_T, typename CONFIG_T> 
-void selu(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) {
+void selu(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in]) 
+{
     for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
         res[ii] = ac_math::ac_selu_pwl<res_T>(data[ii]);
     }

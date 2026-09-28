@@ -15,7 +15,7 @@
 #include <ac_fixed.h>
 #include <ac_math/ac_elu_pwl.h>
 #include <ac_math/ac_pow_pwl.h>
-#include <ac_math/ac_relu.h>
+#include <ac_math/ac_relu_general.h>
 #include <ac_math/ac_selu_pwl.h>
 #include <ac_math/ac_sigmoid_pwl.h>
 #include <ac_math/ac_softmax_pwl_new.h>
@@ -62,7 +62,7 @@ void relu(ac_channel<data_T> &data, ac_channel<res_T> &res)
 
         #pragma hls_unroll
         ReLUPackLoop: for (unsigned int j = 0; j < res_T::size; j++) {
-            ac_math::ac_relu(in_data[j], out_data[j]);
+            relu_dispatch<typename data_T::value_type, typename res_T::value_type, CONFIG_T, CONFIG_T::max_value_type>::run(in_data[j], out_data[j]);
         }
 
         res.write(out_data);
@@ -93,12 +93,66 @@ void sigmoid(ac_channel<data_T> &data, ac_channel<res_T> &res)
 //       Softmax Activation
 // *************************************************
 
-#pragma hls_design block
-template <class data_T, class res_T, typename CONFIG_T> 
-void softmax(ac_channel<data_T> &data, ac_channel<res_T> &res) 
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_latency(ac_channel<data_T> &data, ac_channel<res_T> &res) 
 {
-    static_assert(CONFIG_T::axis == -1, "Softmax layer only supports axis=-1.");
-    
+    // Initialize the lookup tables
+#ifdef __SYNTHESIS__
+    bool initialized = false;
+    typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
+#else
+    static bool initialized = false;
+    static typename CONFIG_T::exp_table_t exp_table[CONFIG_T::exp_table_size];
+    static typename CONFIG_T::inv_table_t invert_table[CONFIG_T::inv_table_size];
+
+#endif
+    if (!initialized) {
+        // Note we are exponentiating the inputs, which have type data_T
+        init_exp_table<typename data_T::value_type, CONFIG_T>(exp_table);
+        // Note we are inverting the exponentials, which have type exp_table_t
+        init_invert_table<typename CONFIG_T::inv_inp_t, CONFIG_T>(invert_table);
+        initialized = true;
+    }
+
+    constexpr unsigned multiplier_limit = DIV_ROUNDUP(data_T::size, CONFIG_T::reuse_factor);
+    constexpr unsigned ii = data_T::size / multiplier_limit;
+
+    // Calculate all the e^x's
+    typename CONFIG_T::accum_t exp_res[data_T::size];
+    typename CONFIG_T::inv_inp_t exp_sum(0);
+    #pragma hls_pipeline_init_interval ii
+    SoftmaxExpLoop: for (unsigned i = 0; i < CONFIG_T::n_in / data_T::size; i++) {
+        data_T in_pack = data.read();
+        #pragma hls_unroll
+        SoftmaxExpPackLoop: for (unsigned j = 0; j < data_T::size; j++) {
+            unsigned x = softmax_idx_from_real_val<typename data_T::value_type, CONFIG_T::exp_table_size>(in_pack[j]);
+            exp_res[j] = exp_table[x];
+        }
+
+        // Explicitly sum the results with an adder tree.
+        // Rounding & Saturation mode, which improve accuracy, prevent Vivado from expression balancing
+        Op_add<typename CONFIG_T::accum_t> op_add;
+        exp_sum = reduce<typename CONFIG_T::accum_t, data_T::size, Op_add<typename CONFIG_T::accum_t>>(exp_res, op_add);
+
+        typename CONFIG_T::inv_table_t inv_exp_sum =
+            invert_table[softmax_idx_from_real_val<typename CONFIG_T::inv_inp_t, CONFIG_T::inv_table_size>(exp_sum)];
+
+        res_T out_pack;
+
+        #pragma hls_unroll
+        SoftmaxInvPackLoop: for (unsigned j = 0; j < res_T::size; j++) {
+            out_pack[j] = exp_res[j] * inv_exp_sum;
+        }
+        res.write(out_pack);
+    }
+}
+
+
+// #pragma hls_design block
+template <class data_T, class res_T, typename CONFIG_T> 
+void softmax_stable(ac_channel<data_T> &data, ac_channel<res_T> &res) 
+{    
     typename data_T::value_type data_cache[data_T::size];
     typename res_T::value_type res_cache[res_T::size];
     #pragma hls_pipeline_init_interval 1
@@ -119,6 +173,125 @@ void softmax(ac_channel<data_T> &data, ac_channel<res_T> &res)
         }
 
         res.write(out_pack);
+    }
+}
+
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_legacy(ac_channel<data_T> &data, ac_channel<res_T> &res) 
+{
+    // Initialize the lookup table
+#ifdef __SYNTHESIS__
+    bool initialized = false;
+    typename CONFIG_T::table_t exp_table[CONFIG_T::table_size];
+    typename CONFIG_T::table_t invert_table[CONFIG_T::table_size];
+#else
+    static bool initialized = false;
+    static typename CONFIG_T::table_t exp_table[CONFIG_T::table_size];
+    static typename CONFIG_T::table_t invert_table[CONFIG_T::table_size];
+#endif
+    if (!initialized) {
+        init_exp_table_legacy<CONFIG_T, CONFIG_T::table_size>(exp_table);
+        init_invert_table_legacy<CONFIG_T, CONFIG_T::table_size>(invert_table);
+        initialized = true;
+    }
+
+    // Index into the lookup table based on data for exponentials
+    typename CONFIG_T::table_t exp_res[data_T::size];
+    typename CONFIG_T::table_t exp_diff_res;
+    typename data_T::value_type data_cache[data_T::size];
+
+    #pragma hls_pipeline_init_interval 1
+    SoftmaxInitLoop:
+    for (unsigned s = 0; s < CONFIG_T::n_in / data_T::size; s++) {
+        data_T in_pack = data.read();
+        #pragma hls_unroll
+        SoftmaxInitPackLoop: for (unsigned j = 0; j < data_T::size; j++) {
+            data_cache[j] = in_pack[j];
+            exp_res[j] = 0;
+        }
+
+        #pragma hls_unroll
+        SoftmaxExpLoop: for (int i = 0; i < data_T::size; i++) {
+            #pragma hls_unroll
+            SoftmaxExpInner: for (int j = 0; j < data_T::size; j++) {
+                if (i == j) {
+                    exp_diff_res = 1;
+                } else {
+                    int data_round = (data_cache[j] - data_cache[i]) * CONFIG_T::table_size / 16;
+                    int index = data_round + 8 * CONFIG_T::table_size / 16;
+                    if (index < 0)
+                        index = 0;
+                    if (index > CONFIG_T::table_size - 1)
+                        index = CONFIG_T::table_size - 1;
+                    exp_diff_res = exp_table[index];
+                }
+
+                exp_res[i] += exp_diff_res;
+            }
+        }
+
+        res_T out_pack;
+
+        #pragma hls_unroll
+        SoftmaxInvPackLoop: for (unsigned j = 0; j < res_T::size; j++) {
+            int exp_res_index = exp_res[j] * CONFIG_T::table_size / 64;
+            if (exp_res_index < 0)
+                exp_res_index = 0;
+            if (exp_res_index > CONFIG_T::table_size - 1)
+                exp_res_index = CONFIG_T::table_size - 1;
+
+            out_pack[j] = (typename res_T::value_type)invert_table[exp_res_index];
+        }
+        res.write(out_pack);
+    }
+}
+
+template <class data_T, class res_T, typename CONFIG_T>
+void softmax_argmax(ac_channel<data_T> &data, ac_channel<res_T> &res) 
+{
+    #pragma hls_pipeline_init_interval 1
+    for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
+        data_T in_data = data.read();
+        res_T out_data;
+
+        #pragma hls_unroll
+        for (int i = 0; i < res_T::size; i++) {
+            out_data[i] = (typename res_T::value_type)0;
+        }
+
+        typename data_T::value_type maximum = in_data[0];
+        int idx = 0;
+
+        #pragma hls_unroll
+        for (int i = 1; i < res_T::size; i++) {
+            if (in_data[i] > maximum) {
+                maximum = in_data[i];
+                idx = i;
+            }
+        }
+
+        out_data[idx] = (typename res_T::value_type)1;
+        res.write(out_data);
+    }
+}
+
+#pragma hls_design
+template <class data_T, class res_T, typename CONFIG_T> 
+void softmax(ac_channel<data_T> &data, ac_channel<res_T> &res) 
+{
+    static_assert(CONFIG_T::axis == -1, "Softmax layer only supports axis=-1.");
+
+    if constexpr(CONFIG_T::implementation == softmax_implementation::latency) {
+        softmax_latency<data_T, res_T, CONFIG_T>(data, res);
+    }
+    if constexpr(CONFIG_T::implementation == softmax_implementation::stable) {
+        softmax_stable<data_T, res_T, CONFIG_T>(data, res);
+    }
+    if constexpr(CONFIG_T::implementation == softmax_implementation::legacy) {
+        softmax_legacy<data_T, res_T, CONFIG_T>(data, res);
+    }
+    if constexpr(CONFIG_T::implementation == softmax_implementation::argmax) {
+        softmax_argmax<data_T, res_T, CONFIG_T>(data, res);
     }
 }
 
@@ -152,9 +325,6 @@ void tanh(ac_channel<data_T> &data, ac_channel<res_T> &res)
 template <class data_T, class res_T, typename CONFIG_T> 
 void hard_sigmoid(ac_channel<data_T> &data, ac_channel<res_T> &res) 
 {
-    // typename data_T::value_type slope = (typename data_T::value_type)0.2;
-    // typename data_T::value_type shift = (typename data_T::value_type)0.5;
-
     #pragma hls_pipeline_init_interval 1
     HardSigmoidActLoop: for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
 
@@ -163,7 +333,7 @@ void hard_sigmoid(ac_channel<data_T> &data, ac_channel<res_T> &res)
 
         #pragma hls_unroll
         HardSigmoidPackLoop: for (int j = 0; j < res_T::size; j++) {
-            typename data_T::value_type datareg = CONFIG_T::slope * in_data[j] + CONFIG_T::shift;
+            auto datareg = CONFIG_T::slope * in_data[j] + CONFIG_T::shift;
             if (datareg > 1)
                 datareg = 1;
             else if (datareg < 0)
@@ -183,9 +353,6 @@ void hard_sigmoid(ac_channel<data_T> &data, ac_channel<res_T> &res)
 template <class data_T, class res_T, typename CONFIG_T> 
 void hard_tanh(ac_channel<data_T> &data, ac_channel<res_T> &res) 
 {
-// typename data_T::value_type slope = (typename data_T::value_type) 0.2;
-// typename data_T::value_type shift = (typename data_T::value_type) 0.5;
-
     #pragma hls_pipeline_init_interval 1
     HardTanhActLoop: for (unsigned int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {
 
@@ -209,9 +376,6 @@ void hard_tanh(ac_channel<data_T> &data, ac_channel<res_T> &res)
 // *************************************************
 //       Leaky RELU Activation
 // *************************************************
-
-
-
 
 // -------------------------------------------------
 // General version: For non-packed data_T
@@ -238,18 +402,16 @@ void leaky_relu_nonpacked(ac_channel<data_T> &data, param_T alpha, ac_channel<re
         res.write(out_data);
     }
         // std::cout << "INFO: leaky_relu generic path (non-packed) selected\n";
-
 }
-
 
 // -------------------------------------------------
 // Specialized version: For ac_array<ac_packed_vector<T, N>, B>
 // -------------------------------------------------
 #pragma hls_design block
+#pragma hls_pipeline_init_interval 1
 template <class data_T, class param_T, class res_T, typename CONFIG_T>
 void leaky_relu_packed(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T> &res) 
 {
-
     constexpr int BUS_WORDS = data_T::dim1;
     data_T in_array;
     typedef typename data_T::ElemType in_vector_t;
@@ -293,7 +455,8 @@ void leaky_relu_packed(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T
 }
 
 template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void leaky_relu(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T> &res) {
+void leaky_relu(ac_channel<data_T> &data, param_T alpha, ac_channel<res_T> &res) 
+{
     if constexpr (CONFIG_T::impl == activation_impl_type::ac_window) {
         leaky_relu_packed<data_T, param_T, res_T, CONFIG_T>(data, alpha, res);
     } else {
@@ -408,7 +571,7 @@ void selu(ac_channel<data_T> &data, ac_channel<res_T> &res)
 // *************************************************
 #pragma hls_design block
 template <class data_T, class param_T, class res_T, typename CONFIG_T>
-void prelu(ac_channel<data_T> &data, param_T alpha[CONFIG_T::n_in], ac_channel<res_T> &res) 
+void prelu(ac_channel<data_T> &data, const param_T alpha[CONFIG_T::n_in], ac_channel<res_T> &res) 
 {
     #pragma hls_pipeline_init_interval 1
     PReLUActLoop: for (int i = 0; i < CONFIG_T::n_in / res_T::size; i++) {

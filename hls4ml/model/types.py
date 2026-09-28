@@ -816,7 +816,14 @@ class ExponentWeightVariable(WeightVariable):
     def __init__(self, var_name, type_name, precision, data, quantizer=None, **kwargs):
         super().__init__(var_name, type_name, precision, data, quantizer, **kwargs)
         self.type = ExponentType(type_name, precision, **kwargs)
-        self.shape = list(self.data.shape[:-1])
+        # NOTE: self.shape is already set correctly to list(self.data.shape) by the base
+        # WeightVariable.__init__ above. Do not truncate the last dimension here: self.data
+        # is the plain quantized weight tensor (e.g. (kh, kw, in_ch, filters) for a conv
+        # kernel) -- it does not yet carry a trailing sign/value "pair" axis. That pairing is
+        # only constructed transiently inside _format()/__iter__() for writing header/txt
+        # values and is never stored back onto self.data. Dropping the last axis here silently
+        # undersizes any consumer that reads .shape directly (e.g. the Catapult merged/RAM
+        # weight-store codegen), losing an entire real dimension (e.g. all but one filter).
 
     def _format(self):
         y = self.data

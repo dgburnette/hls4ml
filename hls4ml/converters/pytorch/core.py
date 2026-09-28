@@ -71,6 +71,8 @@ def parse_activation_layer(operation, layer_name, input_names, input_shapes, nod
 
     if node.op == 'call_module':
         if layer['class_name'] in ['ReLU', 'Sigmoid', 'Tanh']:
+            if layer['class_name'] == 'ReLU':
+                layer['activ_param'] = [None, 0.0, 0.0]
             layer['class_name'] = 'Activation'
         if layer['class_name'] == 'LeakyReLU':
             layer['activ_param'] = class_object.negative_slope
@@ -93,6 +95,8 @@ def parse_activation_layer(operation, layer_name, input_names, input_shapes, nod
                     raise Exception('dim needs to be -1 for io_stream')
     else:
         if layer['class_name'] in ['ReLU', 'Sigmoid', 'Tanh']:
+            if layer['class_name'] == 'ReLU':
+                layer['activ_param'] = [None, 0.0, 0.0]
             layer['class_name'] = 'Activation'
         if layer['class_name'] == 'LeakyReLU':
             layer['activ_param'] = node.kwargs['negative_slope']

@@ -1390,6 +1390,20 @@ class LSTM(Layer):
         TypeAttribute('recurrent_bias'),
     ]
 
+    def _set_hard_activation_attrs(self, activation_attr, prefix=''):
+        activation = self.get_attr(activation_attr)
+        if activation not in ('hard_sigmoid', 'hard_tanh'):
+            return
+        if self.get_attr(f'{prefix}slope') is None:
+            self.set_attr(f'{prefix}slope', 0.2)
+        if self.get_attr(f'{prefix}shift') is None:
+            self.set_attr(f'{prefix}shift', 0.5)
+        slope_prec = self.get_attr('slope_prec', FixedPrecisionType(width=16, integer=0, signed=False))
+        shift_prec = self.get_attr('shift_prec', FixedPrecisionType(width=2, integer=0, signed=False))
+        index = self.get_attr('index')
+        self.set_attr(f'{prefix}slope_t', NamedType(f'{prefix}slope{index}_t', precision=slope_prec))
+        self.set_attr(f'{prefix}shift_t', NamedType(f'{prefix}shift{index}_t', precision=shift_prec))
+
     def initialize(self):
         if self.attributes['return_sequences']:
             shape = [self.attributes['n_timesteps'], self.attributes['n_out']]
@@ -1424,6 +1438,9 @@ class LSTM(Layer):
             recurrent_bias = np.zeros(recurrent_weight.shape[1])
             self.add_weights_variable(name='recurrent_bias', var_name='br{index}', data=recurrent_bias)
 
+        self._set_hard_activation_attrs('activation')
+        self._set_hard_activation_attrs('recurrent_activation', prefix='recr_')
+
 
 class GRU(Layer):
     _expected_attributes = [
@@ -1445,6 +1462,20 @@ class GRU(Layer):
         TypeAttribute('recurrent_weight'),
         TypeAttribute('recurrent_bias'),
     ]
+
+    def _set_hard_activation_attrs(self, activation_attr, prefix=''):
+        activation = self.get_attr(activation_attr)
+        if activation not in ('hard_sigmoid', 'hard_tanh'):
+            return
+        if self.get_attr(f'{prefix}slope') is None:
+            self.set_attr(f'{prefix}slope', 0.2)
+        if self.get_attr(f'{prefix}shift') is None:
+            self.set_attr(f'{prefix}shift', 0.5)
+        slope_prec = self.get_attr('slope_prec', FixedPrecisionType(width=16, integer=0, signed=False))
+        shift_prec = self.get_attr('shift_prec', FixedPrecisionType(width=2, integer=0, signed=False))
+        index = self.get_attr('index')
+        self.set_attr(f'{prefix}slope_t', NamedType(f'{prefix}slope{index}_t', precision=slope_prec))
+        self.set_attr(f'{prefix}shift_t', NamedType(f'{prefix}shift{index}_t', precision=shift_prec))
 
     def initialize(self):
         if self.attributes['return_sequences']:
@@ -1473,6 +1504,9 @@ class GRU(Layer):
         # biases
         self.add_weights_variable(name='bias', var_name='b{index}')
         self.add_weights_variable(name='recurrent_bias', var_name='br{index}')
+
+        self._set_hard_activation_attrs('activation')
+        self._set_hard_activation_attrs('recurrent_activation', prefix='recr_')
 
 
 class TimeDistributed(Layer):

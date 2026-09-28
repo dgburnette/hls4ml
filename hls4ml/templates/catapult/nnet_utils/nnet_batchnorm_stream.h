@@ -1,4 +1,3 @@
-
 #ifndef NNET_BATCHNORM_STREAM_H_
 #define NNET_BATCHNORM_STREAM_H_
 
@@ -18,10 +17,10 @@ template <class data_T, class res_T, typename CONFIG_T>
 void normalize(ac_channel<data_T> &data, ac_channel<res_T> &res, typename CONFIG_T::scale_t scale[CONFIG_T::n_scale_bias],
                typename CONFIG_T::bias_t bias[CONFIG_T::n_scale_bias]) 
 {
-    constexpr unsigned multiplier_limit = DIV_ROUNDUP(CONFIG_T::n_in, CONFIG_T::reuse_factor);
-    constexpr unsigned ii = CONFIG_T::n_in / multiplier_limit;
+    // constexpr unsigned multiplier_limit = DIV_ROUNDUP(CONFIG_T::n_in, CONFIG_T::reuse_factor);
+    constexpr unsigned ii = CONFIG_T::n_in / CONFIG_T::multiplier_limit;
     (void)ii;
-    CONFIG_T::template product<typename data_T::value_type, typename CONFIG_T::scale_t>::limit(multiplier_limit);
+    // CONFIG_T::template product<typename data_T::value_type, typename CONFIG_T::scale_t>::limit(multiplier_limit);
 
     #pragma hls_pipeline_init_interval ii
     BatchNormLoop: for (unsigned int i = 0; i < CONFIG_T::n_in / data_T::size; i++) {
